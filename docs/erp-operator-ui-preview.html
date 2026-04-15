@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KRISHIV ERP UI Preview</title>
+  <style>
+    :root {
+      --bg: #f5f1ea;
+      --paper: #fffdf9;
+      --panel: #ffffff;
+      --panel-soft: #faf6ef;
+      --line: #ddd1c1;
+      --text: #2f241a;
+      --muted: #74665a;
+      --brand: #8c441c;
+      --brand-dark: #6e2d0e;
+      --brand-soft: #ead7c8;
+      --ok: #2f7d52;
+      --warn: #b87823;
+      --hold: #b04a36;
+      --shadow: 0 18px 50px rgba(69, 42, 18, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(140, 68, 28, 0.08), transparent 30%),
+        linear-gradient(180deg, #f8f4ee 0%, var(--bg) 100%);
+      color: var(--text);
+      font: 15px/1.45 "Segoe UI", Tahoma, sans-serif;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+
+    .sidebar {
+      padding: 22px 18px;
+      background: linear-gradient(180deg, #ede1d1 0%, #e7dac9 100%);
+      border-right: 1px solid var(--line);
+    }
+
+    .brand {
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid rgba(110, 45, 14, 0.14);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 28px;
+      color: var(--brand-dark);
+      letter-spacing: 0.2px;
+    }
+
+    .brand p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .menu {
+      display: grid;
+      gap: 8px;
+    }
+
+    .menu .item {
+      padding: 12px 14px;
+      border-radius: 12px;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid transparent;
+    }
+
+    .menu .item.active {
+      background: var(--panel);
+      border-color: var(--line);
+      box-shadow: 0 10px 24px rgba(77, 51, 31, 0.08);
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+
+    .menu .item.disabled {
+      opacity: 0.45;
+    }
+
+    .content {
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: 28px;
+      color: var(--brand-dark);
+    }
+
+    .topbar p {
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(140, 68, 28, 0.08);
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.18fr 0.82fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid #efe6da;
+      background: linear-gradient(180deg, #fffdfb 0%, #fbf6ef 100%);
+    }
+
+    .panel-head h3 {
+      margin: 0;
+      font-size: 19px;
+    }
+
+    .panel-head span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .body {
+      padding: 18px;
+    }
+
+    .search {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 0.9fr auto;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+      padding: 12px 13px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #be916d;
+      box-shadow: 0 0 0 4px rgba(140, 68, 28, 0.08);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .primary {
+      background: linear-gradient(180deg, #9a4a1d 0%, var(--brand-dark) 100%);
+      color: white;
+    }
+
+    .secondary {
+      background: #fff;
+      color: var(--brand-dark);
+      border: 1px solid var(--line);
+    }
+
+    .registration-card {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr 0.8fr 0.8fr;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid #eadfce;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fffdfa 0%, #f8f3eb 100%);
+      margin-bottom: 14px;
+    }
+
+    .registration-card .big {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--brand-dark);
+    }
+
+    .mini {
+      display: grid;
+      gap: 4px;
+    }
+
+    .mini strong {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .mini span {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .span-2 {
+      grid-column: span 2;
+    }
+
+    .inline-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .summary-chip {
+      background: var(--panel-soft);
+      border: 1px solid #eadfce;
+      border-radius: 999px;
+      padding: 9px 12px;
+      font-size: 13px;
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+
+    .save-strip {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #faf5ee;
+      border: 1px dashed #dabb9e;
+    }
+
+    .save-strip strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--brand-dark);
+    }
+
+    .save-strip span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+      border-bottom: 1px solid #eee5d8;
+      text-align: left;
+      font-size: 13px;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .right-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hotkeys {
+      display: grid;
+      gap: 10px;
+    }
+
+    .hotkey {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--panel-soft);
+      border: 1px solid #ecdfcf;
+    }
+
+    .kbd {
+      min-width: 62px;
+      text-align: center;
+      padding: 7px 10px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #decebb;
+      color: var(--brand-dark);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .alert-card {
+      padding: 16px;
+      border-radius: 16px;
+      background: #fff5f1;
+      border: 1px solid #f1cdc3;
+      color: #7a2f1f;
+    }
+
+    .alert-card h4,
+    .modal-card h4 {
+      margin: 0 0 8px;
+      font-size: 17px;
+    }
+
+    .alert-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .alert-item {
+      background: rgba(176, 74, 54, 0.08);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .modal-card {
+      padding: 18px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #fffefb 0%, #fbf5ed 100%);
+      border: 1px solid #e6d6c4;
+    }
+
+    .modal-success {
+      color: var(--ok);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .operator-footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1200px) {
+      .grid,
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .search,
+      .form-grid,
+      .registration-card {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .content {
+        padding: 14px;
+      }
+
+      .search,
+      .form-grid,
+      .registration-card {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>KRISHIV</h1>
+        <p>Operator-first ERP preview</p>
+      </div>
+
+      <nav class="menu">
+        <div class="item active">Intake Workspace</div>
+        <div class="item">Registration Master</div>
+        <div class="item">Intake Entry Edit</div>
+        <div class="item">Slip Print Center</div>
+        <div class="item">Financial Voucher</div>
+        <div class="item disabled">Database Backup</div>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div>
+          <h2>Operator Intake Workspace</h2>
+          <p>One-screen flow for faster daily entry and fewer mistakes.</p>
+        </div>
+        <div class="meta-strip">
+          <div class="pill">User: Intake Operator</div>
+          <div class="pill">Today: 26 Receipts</div>
+          <div class="pill">Open Lots: 18</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>1. Find Registration</h3>
+              <span>Search and launch intake from one place</span>
+            </div>
+            <div class="body">
+              <div class="search">
+                <label>
+                  Search Farmer / Reg. Code
+                  <input value="R25-4-563 / NASIR HUSAIN" />
+                </label>
+                <label>
+                  Village
+                  <select>
+                    <option>JETPURA</option>
+                  </select>
+                </label>
+                <label>
+                  Seed Class
+                  <select>
+                    <option>FOUNDATION I</option>
+                  </select>
+                </label>
+                <div class="button-row">
+                  <button class="primary">Load</button>
+                </div>
+              </div>
+
+              <div class="registration-card">
+                <div>
+                  <div class="big">R25-4-563</div>
+                  <div>NASIR HUSAIN</div>
+                  <div style="color: var(--muted); margin-top: 4px;">Jetpura, Kishanganj, Baran</div>
+                </div>
+                <div class="mini">
+                  <strong>Crop / Variety</strong>
+                  <span>Wheat / RAJ-4037</span>
+                </div>
+                <div class="mini">
+                  <strong>Expected Yield</strong>
+                  <span>222.95 QTL</span>
+                </div>
+                <div class="mini">
+                  <strong>Balance Available</strong>
+                  <span style="color: var(--ok);">112.95 QTL</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>2. Quick Intake Entry</h3>
+              <span>All primary fields visible without scrolling around the app</span>
+            </div>
+            <div class="body">
+              <div class="form-grid">
+                <label>
+                  Receipt No.
+                  <input value="107" />
+                </label>
+                <label>
+                  Receipt Date
+                  <input value="14-04-2026" />
+                </label>
+                <label>
+                  Godown
+                  <select>
+                    <option>PIYUSH ASSOCIATES</option>
+                  </select>
+                </label>
+                <label>
+                  Stack No.
+                  <input value="03" />
+                </label>
+
+                <label>
+                  Gross Weight (QTL)
+                  <input value="52.30" />
+                </label>
+                <label>
+                  Bags
+                  <input value="89" />
+                </label>
+                <label>
+                  Net Weight (QTL)
+                  <input value="51.52" />
+                </label>
+                <label>
+                  Weight / Bag (KG)
+                  <input value="57.89" />
+                </label>
+
+                <label>
+                  Moisture (%)
+                  <input value="11.2" />
+                </label>
+                <label>
+                  Vehicle No.
+                  <input value="RJ08GA6044" />
+                </label>
+                <label class="span-2">
+                  Remarks
+                  <input value="Fresh arrival, stack space confirmed." />
+                </label>
+              </div>
+
+              <div class="inline-summary">
+                <div class="summary-chip">Expected Balance: 112.95 QTL</div>
+                <div class="summary-chip">Current Net: 51.52 QTL</div>
+                <div class="summary-chip">Likely Lot: Continue in L2</div>
+                <div class="summary-chip">Discrepancy: No</div>
+              </div>
+
+              <div class="save-strip">
+                <div>
+                  <strong>Suggested improvement #1</strong>
+                  <span>Show save summary before commit: receipt, lot, stack, discrepancy.</span>
+                </div>
+                <div class="button-row">
+                  <button class="secondary">Save & New</button>
+                  <button class="primary">Save Intake</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>3. Receipt Review Strip</h3>
+              <span>Small same-screen confirmation instead of opening another module</span>
+            </div>
+            <div class="body">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Receipt</th>
+                    <th>Reg. Code</th>
+                    <th>Farmer</th>
+                    <th>Stack</th>
+                    <th>Net</th>
+                    <th>Lot Result</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>11:32</td>
+                    <td>107</td>
+                    <td>R25-4-563</td>
+                    <td>Nasir Husain</td>
+                    <td>03</td>
+                    <td>51.52 QTL</td>
+                    <td>L2 continued</td>
+                    <td style="color: var(--ok); font-weight: 700;">Saved</td>
+                  </tr>
+                  <tr>
+                    <td>10:48</td>
+                    <td>106</td>
+                    <td>R25-4-169</td>
+                    <td>Harjinder Singh</td>
+                    <td>09</td>
+                    <td>69.81 QTL</td>
+                    <td>L4 created</td>
+                    <td style="color: var(--ok); font-weight: 700;">Saved</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="right-stack">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Quick Actions</h3>
+              <span>Operator speed aids</span>
+            </div>
+            <div class="body hotkeys">
+              <div class="hotkey">
+                <div>
+                  <strong>Search shortcut</strong>
+                  <div style="color: var(--muted); font-size: 13px;">Jump back to registration search instantly</div>
+                </div>
+                <div class="kbd">Alt + F</div>
+              </div>
+              <div class="hotkey">
+                <div>
+                  <strong>Save current receipt</strong>
+                  <div style="color: var(--muted); font-size: 13px;">No mouse movement needed at the desk</div>
+                </div>
+                <div class="kbd">Ctrl + S</div>
+              </div>
+              <div class="hotkey">
+                <div>
+                  <strong>New receipt line</strong>
+                  <div style="color: var(--muted); font-size: 13px;">Useful when vehicle unload splits across stacks</div>
+                </div>
+                <div class="kbd">Ctrl + L</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Edge Warning</h3>
+              <span>Suggested improvement #2</span>
+            </div>
+            <div class="body">
+              <div class="alert-card">
+                <h4>Discrepancy handling should feel guided</h4>
+                <div>When net weight crosses expected balance, operator should not guess what happens next.</div>
+                <div class="alert-list">
+                  <div class="alert-item">Show accepted qty vs excess qty clearly before save.</div>
+                  <div class="alert-item">Offer one-click path: Save with discrepancy and mark stack.</div>
+                  <div class="alert-item">Explain whether the lot, receipt, or stack goes under review.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Post-Save Dialog</h3>
+              <span>Suggested improvement #3</span>
+            </div>
+            <div class="body">
+              <div class="modal-card">
+                <div class="modal-success">Entry saved successfully.</div>
+                <div><strong>Receipt No.</strong> 107</div>
+                <div><strong>Registration</strong> R25-4-563</div>
+                <div><strong>Net Saved</strong> 51.52 QTL</div>
+                <div><strong>Lot Result</strong> Added to 2025-26/R25-4-563/L2</div>
+                <div><strong>Discrepancy</strong> No discrepancy created</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Decision Notes</h3>
+              <span>Suggested improvements #4 to #6</span>
+            </div>
+            <div class="body">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Suggestion</th>
+                    <th>Why it helps operator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Role-based operator mode</td>
+                    <td>Hide reports, validations, and finance noise from intake desk users.</td>
+                  </tr>
+                  <tr>
+                    <td>Smart defaults</td>
+                    <td>Pre-fill last used godown, stack, and date to reduce repeated typing.</td>
+                  </tr>
+                  <tr>
+                    <td>Inline field validation</td>
+                    <td>Show stack missing, over-balance, or invalid bags beside the field before save.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="operator-footer">
+                This preview is intentionally static. It is meant to help us decide the next UI direction before coding the full workflow redesign.
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

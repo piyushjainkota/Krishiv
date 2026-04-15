@@ -1,0 +1,1090 @@
+:root {
+  --bg: #f5f1ea;
+  --panel: #ffffff;
+  --panel-soft: #fbf8f3;
+  --sidebar: #ebe2d5;
+  --line: #ded5c8;
+  --text: #35281d;
+  --muted: #7b6b5d;
+  --brand: #8c441c;
+  --brand-dark: #6d2f0d;
+  --brand-soft: #e7d4c5;
+  --success: #2d7a4a;
+  --warning: #d98f23;
+  --danger: #b44a34;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #eee7de;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.94rem;
+  vertical-align: top;
+}
+
+.registrationTable th,
+.registrationTable td {
+  font-size: 0.86rem;
+  padding: 10px 10px;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.appShell {
+  min-height: 100vh;
+}
+
+.loginShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: linear-gradient(180deg, #f4ede4 0%, #efe5d8 100%);
+}
+
+.loginCard {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 18px;
+}
+
+.loginTitleBlock h1 {
+  margin: 0 0 8px;
+}
+
+.loginTitleBlock p,
+.loginError {
+  margin: 0;
+}
+
+.loginError {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.topBar {
+  background: linear-gradient(90deg, var(--brand-dark), var(--brand));
+  color: white;
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.topBar h1,
+.contentHeader h2,
+.panelHeader h3,
+.infoCard h3,
+.detailCard h3 {
+  margin: 0;
+}
+
+.topBar p {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.headerMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.headerMeta span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100vh - 78px);
+}
+
+.sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
+  padding: 20px;
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-width: 0;
+}
+
+.sidebarBrand {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.sidebarBrand strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.sidebarBrand p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.seal {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: linear-gradient(180deg, #cb8f2f, #9f5f10);
+  font-weight: 700;
+}
+
+.navList,
+.sidebarCard,
+.contentStack,
+.linesStack,
+.receiptsList,
+.detailGrid,
+.discrepancyTree {
+  display: grid;
+  gap: 12px;
+}
+
+.navButton,
+.primaryButton,
+.secondaryButton,
+.ghostButton {
+  border: none;
+  cursor: pointer;
+}
+
+.navButton {
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+
+.navButton.active {
+  background: white;
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+.navButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sidebarCard,
+.panel,
+.detailCard,
+.lineCard,
+.receiptCard,
+.selectedCard,
+.shiftPanel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.sidebarCard {
+  padding: 16px;
+}
+
+.sidebarCard h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.sidebarCard label,
+.formGrid label {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebarCard span,
+.formGrid span,
+.detailGrid span,
+.metricBox span,
+.receiptCard span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sidebarCard input,
+.sidebarCard select,
+.formGrid input,
+.formGrid select,
+.filtersBar input,
+.filtersBar select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.secondaryButton,
+.primaryButton {
+  height: 42px;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-weight: 600;
+}
+
+.secondaryButton {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.primaryButton {
+  background: var(--brand);
+  color: white;
+}
+
+.ghostButton {
+  background: transparent;
+  color: var(--danger);
+}
+
+.contentArea {
+  padding: 24px;
+  min-width: 0;
+}
+
+.contentHeader {
+  margin-bottom: 18px;
+}
+
+.contentHeader p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panelHeader,
+.lineCardHeader,
+.actionsFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.panelHeaderActions,
+.paginationBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panelHeader {
+  margin-bottom: 16px;
+}
+
+.metricsPanel {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.buttonGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metricsPanel,
+.twoColumn,
+.formGrid,
+.compact,
+.detailGrid {
+  display: grid;
+  gap: 16px;
+}
+
+.metricBox {
+  padding: 16px;
+  background: var(--panel-soft);
+  border: 1px solid #efe7dd;
+  border-radius: 14px;
+}
+
+.metricBox strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.35rem;
+}
+
+.twoColumn {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.infoCard ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.mastersPanel {
+  display: grid;
+  gap: 24px;
+}
+
+.mastersHero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(165, 111, 46, 0.12), transparent 32%),
+    linear-gradient(135deg, #fffaf5, #fffdf9);
+}
+
+.mastersIntro {
+  margin: 6px 0 0;
+  color: var(--muted);
+  max-width: 560px;
+}
+
+.mastersStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 12px;
+  align-self: start;
+}
+
+.mastersStatCard {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(165, 111, 46, 0.16);
+  border-radius: 18px;
+  padding: 14px 16px;
+  min-width: 110px;
+}
+
+.mastersStatCard span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.mastersStatCard strong {
+  font-size: 1.35rem;
+  color: var(--ink);
+}
+
+.mastersWorkspace {
+  display: grid;
+  gap: 20px;
+}
+
+.mastersActionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.mastersActionCard {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: 0 18px 30px rgba(98, 71, 41, 0.06);
+}
+
+.mastersCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.mastersCardHeader h4 {
+  margin: 0;
+}
+
+.mastersCardHeader p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.mastersBadge {
+  border-radius: 999px;
+  background: #f3e6d8;
+  color: var(--accent);
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mastersActionCard label {
+  margin-bottom: 12px;
+}
+
+.mastersActionCard .secondaryButton {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.mastersRegisterGrid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 20px;
+}
+
+.mastersRegisterCard {
+  min-width: 0;
+}
+
+.tableWrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sortButton {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0;
+}
+
+.paginationBar {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rowActive {
+  background: #f9f4ed;
+}
+
+.filtersBar {
+  grid-template-columns: 1fr 220px;
+}
+
+.formGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.spanTwo {
+  grid-column: span 2;
+}
+
+.selectedCard {
+  margin-top: 16px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.shiftPanel {
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.lineCard,
+.receiptCard {
+  padding: 16px;
+}
+
+.receiptsList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.receiptCard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.receiptCard strong,
+.status {
+  display: inline-flex;
+}
+
+.status {
+  margin-right: 6px;
+}
+
+.status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.status.active,
+.status.open {
+  color: var(--success);
+  background: #e9f6ee;
+}
+
+.status.blocked {
+  color: var(--danger);
+  background: #fdece8;
+}
+
+.status.exhausted,
+.status.full {
+  color: var(--warning);
+  background: #fff3df;
+}
+
+.treeNode {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--panel-soft);
+}
+
+.treeNode summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.treeNode summary span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.treeSeason {
+  background: #fff;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(35, 24, 15, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.modalCard {
+  width: min(1100px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.sidebarCard {
+  min-width: 0;
+}
+
+.navList {
+  min-width: 0;
+}
+
+.compactTable th,
+.compactTable td {
+  font-size: 0.82rem;
+  padding: 9px 8px;
+}
+
+.actionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smallButton {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.smallButton:hover {
+  background: var(--panel-soft);
+}
+
+.inlineActionRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tableHint {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.infoTile {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+}
+
+.infoTile span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.slipPreview {
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.slipPreviewA5 {
+  width: min(640px, 100%);
+}
+
+.slipPreviewA4 {
+  width: min(980px, 100%);
+}
+
+.slipHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.slipHeader h4,
+.slipHeader p {
+  margin: 0;
+}
+
+.slipHeader p {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.slipSummaryGrid,
+.slipTotalsGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.slipTable th,
+.slipTable td {
+  font-size: 0.82rem;
+  padding: 8px 10px;
+}
+
+.slipFooterNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.slipClassic {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  color: #2f1e12;
+  font-size: 0.95rem;
+}
+
+.slipClassicRule {
+  border-top: 1px solid #5b3d26;
+  margin: 10px 0;
+}
+
+.slipClassicTitle {
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.slipClassicMeta {
+  display: grid;
+  gap: 6px;
+}
+
+.slipClassicDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+  margin-top: 10px;
+}
+
+.slipClassicLine {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.slipClassicLine span {
+  color: var(--text);
+}
+
+.slipClassicSection {
+  font-weight: 700;
+}
+
+.slipClassicTable th,
+.slipClassicTable td {
+  padding: 7px 8px;
+  font-size: 0.92rem;
+}
+
+.slipClassicTotalRow td {
+  font-weight: 700;
+  border-top: 1px solid #5b3d26;
+}
+
+.slipClassicRemarks {
+  margin-top: 12px;
+}
+
+.slipClassicRemarks p {
+  margin: 6px 0 0;
+}
+
+.slipClassicSignatures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1200px) {
+  .metricsPanel,
+  .buttonGrid,
+  .compact,
+  .slipSummaryGrid,
+  .slipTotalsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .twoColumn,
+  .receiptsList,
+  .receiptCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 14px;
+  }
+
+  .navList {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(150px, 1fr);
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .navButton {
+    white-space: nowrap;
+  }
+
+  .contentArea {
+    padding: 16px;
+  }
+
+  .headerMeta,
+  .topBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .filtersBar,
+  .formGrid,
+  .metricsPanel,
+  .buttonGrid,
+  .compact,
+  .slipSummaryGrid,
+  .slipTotalsGrid,
+  .slipClassicDetails,
+  .slipClassicSignatures {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeader,
+  .panelHeaderActions,
+  .paginationBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .spanTwo {
+    grid-column: auto;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+
+  .modalCard {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .selectedCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .lineCardHeader,
+  .actionsFooter,
+  .actionButtons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actionButtons > button,
+  .actionsFooter > button,
+  .inlineActionRow > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  html,
+  body {
+    font-size: 14px;
+  }
+
+  .topBar {
+    padding: 14px 16px;
+  }
+
+  .topBar h1 {
+    font-size: 1.35rem;
+  }
+
+  .headerMeta {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .headerMeta span,
+  .headerMeta button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .sidebarBrand {
+    gap: 10px;
+  }
+
+  .seal {
+    width: 38px;
+    height: 38px;
+    font-size: 0.82rem;
+  }
+
+  .sidebarCard,
+  .panel,
+  .detailCard,
+  .lineCard,
+  .receiptCard,
+  .selectedCard,
+  .shiftPanel {
+    border-radius: 14px;
+  }
+
+  .panel,
+  .sidebarCard,
+  .shiftPanel,
+  .lineCard,
+  .receiptCard {
+    padding: 14px;
+  }
+
+  th,
+  td,
+  .registrationTable th,
+  .registrationTable td {
+    font-size: 0.78rem;
+    padding: 8px 8px;
+  }
+
+  .compactTable th,
+  .compactTable td {
+    font-size: 0.76rem;
+    padding: 8px 6px;
+  }
+
+  .smallButton,
+  .secondaryButton,
+  .primaryButton,
+  .ghostButton {
+    min-height: 42px;
+  }
+
+  .filtersBar {
+    grid-template-columns: 1fr;
+  }
+
+  .mastersHero,
+  .mastersCardHeader {
+    flex-direction: column;
+  }
+
+  .mastersStats,
+  .mastersActionGrid,
+  .mastersRegisterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeader h3,
+  .contentHeader h2 {
+    font-size: 1.05rem;
+  }
+
+  .slipClassic {
+    padding: 12px;
+    font-size: 0.82rem;
+  }
+
+  .slipClassicTable th,
+  .slipClassicTable td {
+    font-size: 0.76rem;
+    padding: 6px 5px;
+  }
+
+  .slipClassicLine {
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .receiptCard {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .paginationBar {
+    justify-content: stretch;
+  }
+
+  .paginationBar > * {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .contentArea,
+  .sidebar {
+    padding: 12px;
+  }
+
+  .loginShell {
+    padding: 16px 12px;
+  }
+
+  .loginCard {
+    gap: 14px;
+  }
+
+  .navList {
+    grid-auto-columns: minmax(132px, 1fr);
+  }
+
+  .panelHeaderActions,
+  .buttonGrid,
+  .metricsPanel {
+    width: 100%;
+  }
+
+  .mastersHero,
+  .mastersActionCard {
+    padding: 16px;
+  }
+
+  .mastersStats {
+    gap: 10px;
+  }
+
+  .tableWrap {
+    margin: 0 -2px;
+  }
+}

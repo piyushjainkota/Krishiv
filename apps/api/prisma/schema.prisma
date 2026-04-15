@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  INTAKE_OPERATOR
+  GODOWN_MANAGER
+  QUALITY_USER
+  VIEWER
+  AUDITOR
+}
+
+enum RegistrationStatus {
+  ACTIVE
+  BLOCKED
+  CLOSED
+  EXHAUSTED
+  REJECTED
+}
+
+enum LotStatus {
+  OPEN
+  FULL
+  CLOSED
+  HOLD
+}
+
+enum QualityStatus {
+  ACCEPTED
+  HOLD
+  REJECTED
+}
+
+enum CreationReason {
+  NEW_FIRST_LOT
+  NEW_STACK
+  QTY_SPLIT
+  MANUAL_APPROVED
+  IMPORTED
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  role         UserRole
+  passwordHash String?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  imports      Import[]
+  receipts     IntakeReceipt[]
+  auditLogs    AuditLog[]
+}
+
+model Season {
+  id            String             @id @default(uuid())
+  code          String             @unique
+  name          String
+  startDate     DateTime
+  endDate       DateTime
+  isActive      Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  imports       Import[]
+  registrations CropRegistration[]
+}
+
+model Farmer {
+  id                 String             @id @default(uuid())
+  farmerCode         String?            @unique
+  name               String
+  fatherHusbandName  String?
+  village            String
+  block              String?
+  district           String?
+  mobile             String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  registrations      CropRegistration[]
+  intakeReceipts     IntakeReceipt[]
+}
+
+model Import {
+  id            String              @id @default(uuid())
+  fileName      String
+  filePath      String?
+  importedById  String
+  importedAt    DateTime            @default(now())
+  seasonId      String
+  rowCount      Int
+  successCount  Int
+  failedCount   Int
+  notes         String?
+  importedBy    User                @relation(fields: [importedById], references: [id])
+  season        Season              @relation(fields: [seasonId], references: [id])
+  registrations CropRegistration[]
+}
+
+model CropRegistration {
+  id                   String              @id @default(uuid())
+  seasonId             String
+  cropRegistrationCode String
+  farmerId             String
+  crop                 String
+  variety              String
+  classStage           String
+  registeredAreaAcre   Decimal             @db.Decimal(10, 2)
+  inspectedAreaAcre    Decimal             @db.Decimal(10, 2)
+  rejectedAreaAcre     Decimal             @db.Decimal(10, 2)
+  certifiedAreaAcre    Decimal             @db.Decimal(10, 2)
+  expectedYieldQtl     Decimal             @db.Decimal(10, 2)
+  allowedIntakeQtl     Decimal             @db.Decimal(10, 2)
+  totalReceivedQtl     Decimal             @default(0) @db.Decimal(10, 2)
+  balanceQtl           Decimal             @default(0) @db.Decimal(10, 2)
+  status               RegistrationStatus  @default(ACTIVE)
+  sourceImportId       String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  season               Season              @relation(fields: [seasonId], references: [id])
+  farmer               Farmer              @relation(fields: [farmerId], references: [id])
+  sourceImport         Import?             @relation(fields: [sourceImportId], references: [id])
+  receiptLines         IntakeReceiptLine[]
+  lots                 CertificationLot[]
+
+  @@unique([seasonId, cropRegistrationCode])
+  @@index([seasonId, crop, variety, classStage])
+  @@index([farmerId])
+}
+
+model Godown {
+  id           String              @id @default(uuid())
+  name         String              @unique
+  location     String?
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  stacks       Stack[]
+  receiptLines IntakeReceiptLine[]
+  lots         CertificationLot[]
+}
+
+model Stack {
+  id           String              @id @default(uuid())
+  godownId     String
+  stackNo      String
+  capacityQtl  Decimal?            @db.Decimal(10, 2)
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  godown       Godown              @relation(fields: [godownId], references: [id])
+  receiptLines IntakeReceiptLine[]
+  lots         CertificationLot[]
+
+  @@unique([godownId, stackNo])
+}
+
+model IntakeReceipt {
+  id              String              @id @default(uuid())
+  receiptNo       String              @unique
+  receiptDatetime DateTime
+  vehicleNo       String
+  farmerId        String
+  remarks         String?
+  createdById     String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  farmer          Farmer              @relation(fields: [farmerId], references: [id])
+  createdBy       User                @relation(fields: [createdById], references: [id])
+  lines           IntakeReceiptLine[]
+}
+
+model IntakeReceiptLine {
+  id                 String              @id @default(uuid())
+  receiptId          String
+  cropRegistrationId String
+  godownId           String
+  stackId            String
+  noOfBags           Int
+  weightPerBagKg     Decimal?            @db.Decimal(10, 2)
+  grossWeightKg      Decimal?            @db.Decimal(10, 2)
+  tareWeightKg       Decimal?            @db.Decimal(10, 2)
+  netWeightKg        Decimal?            @db.Decimal(10, 2)
+  qtyQtl             Decimal             @db.Decimal(10, 2)
+  moisturePercent    Decimal             @db.Decimal(5, 2)
+  acceptedQtyQtl     Decimal             @db.Decimal(10, 2)
+  rejectedQtyQtl     Decimal             @default(0) @db.Decimal(10, 2)
+  sampleNumber       String?
+  qualityStatus      QualityStatus
+  remarks            String?
+  createdAt          DateTime            @default(now())
+  receipt            IntakeReceipt       @relation(fields: [receiptId], references: [id])
+  cropRegistration   CropRegistration    @relation(fields: [cropRegistrationId], references: [id])
+  godown             Godown              @relation(fields: [godownId], references: [id])
+  stack              Stack               @relation(fields: [stackId], references: [id])
+  allocations        LotAllocation[]
+
+  @@index([cropRegistrationId])
+  @@index([godownId, stackId])
+}
+
+model CertificationLot {
+  id                 String              @id @default(uuid())
+  cropRegistrationId String
+  lotNo              Int
+  lotCode            String              @unique
+  godownId           String
+  stackId            String
+  maxAllowedQtyQtl   Decimal             @default(200) @db.Decimal(10, 2)
+  currentQtyQtl      Decimal             @default(0) @db.Decimal(10, 2)
+  balanceQtyQtl      Decimal             @default(200) @db.Decimal(10, 2)
+  qualityStatus      QualityStatus
+  status             LotStatus           @default(OPEN)
+  creationReason     CreationReason
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  cropRegistration   CropRegistration    @relation(fields: [cropRegistrationId], references: [id])
+  godown             Godown              @relation(fields: [godownId], references: [id])
+  stack              Stack               @relation(fields: [stackId], references: [id])
+  allocations        LotAllocation[]
+
+  @@unique([cropRegistrationId, lotNo])
+  @@index([cropRegistrationId, stackId, status])
+}
+
+model LotAllocation {
+  id                  String             @id @default(uuid())
+  intakeReceiptLineId String
+  lotId               String
+  allocatedQtyQtl     Decimal            @db.Decimal(10, 2)
+  createdAt           DateTime           @default(now())
+  intakeReceiptLine   IntakeReceiptLine  @relation(fields: [intakeReceiptLineId], references: [id])
+  lot                 CertificationLot   @relation(fields: [lotId], references: [id])
+
+  @@index([intakeReceiptLineId])
+  @@index([lotId])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  entityType   String
+  entityId     String
+  action       String
+  oldValueJson Json?
+  newValueJson Json?
+  changedById  String?
+  changedAt    DateTime @default(now())
+  changedBy    User?    @relation(fields: [changedById], references: [id])
+
+  @@index([entityType, entityId, changedAt])
+}
