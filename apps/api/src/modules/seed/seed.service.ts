@@ -6,12 +6,14 @@ import path from "node:path";
 import { promisify } from "node:util";
 import * as XLSX from "xlsx";
 import type {
+  AddFinancialVoucherPaymentInput,
   BackupDatabaseInput,
   CreateDiscrepancyShiftInput,
   CreateFinancialVoucherInput,
   CreateGodownInput,
   CreateReceiptInput,
   CreateStackInput,
+  FinancialVoucherActionInput,
   ImportRegistrationsInput,
   LoginInput,
   ReportFilterInput,
@@ -168,20 +170,27 @@ function nextDiscrepancyNumber(discrepancyNos: string[]) {
   return `D${String(max + 1).padStart(4, "0")}`;
 }
 
-function nextVoucherNumber(existingVoucherNos: string[], cropRegistrationCode: string) {
-  const prefix = `FVP-${cropRegistrationCode}`;
-  const matching = existingVoucherNos.filter((item) => item.startsWith(prefix));
-  if (matching.length === 0) {
-    return prefix;
+function formatVoucherSeasonPart(season: string, year: string) {
+  const normalizedSeason = String(season).trim().toUpperCase();
+  const normalizedYear = String(year).trim();
+  const match = normalizedYear.match(/^(\d{4})-(\d{2,4})$/);
+  if (match) {
+    return `${normalizedSeason}${match[1].slice(2)}-${match[2].slice(-2)}`;
   }
+  return `${normalizedSeason}${normalizedYear}`;
+}
+
+function nextVoucherNumber(existingVoucherNos: string[], season: string, year: string) {
+  const prefix = `${formatVoucherSeasonPart(season, year)}/`;
+  const matching = existingVoucherNos.filter((item) => item.startsWith(prefix));
   let max = 0;
   for (const value of matching) {
-    const parsed = Number(String(value).split("-").pop());
+    const parsed = Number(String(value).slice(prefix.length));
     if (Number.isFinite(parsed)) {
       max = Math.max(max, parsed);
     }
   }
-  return `${prefix}-${String(max + 1).padStart(2, "0")}`;
+  return `${prefix}${String(max + 1).padStart(2, "0")}`;
 }
 
 function timestampForFolder() {
@@ -233,6 +242,16 @@ function deriveRegistrationStatus(params: {
   return "ACTIVE";
 }
 
+function deriveVoucherStatus(finalPayableAmount: number, totalPaidAmount: number) {
+  if (totalPaidAmount <= 0) {
+    return "DRAFT";
+  }
+  if (totalPaidAmount >= finalPayableAmount) {
+    return "PAID";
+  }
+  return "PART PAID";
+}
+
 function nextRegistrationState(registration: RegistrationRecord, addedQtyQtl: number) {
   const totalReceivedQtl = roundQtl(registration.totalReceivedQtl + addedQtyQtl);
   const balanceQtl = roundQtl(Math.max(registration.allowedIntakeQtl - totalReceivedQtl, 0));
@@ -281,12 +300,15 @@ function averageWeightPerBagKg(receipt: { lines: { netWeightQtl?: number; noOfBa
 
 type ReportType =
   | "GODOWN_WISE_DETAIL"
+  | "DISTRICT_WISE_DETAIL"
   | "FARMER_WISE_DETAIL"
+  | "OVERALL_INTAKE"
   | "SUMMARY"
   | "DAILY_INTAKE_REGISTER"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
   | "STACK_WISE_STOCK_POSITION"
+  | "STACK_CARD_REGISTER"
   | "DISCREPANCY_REGISTER";
 
 type ReportPreview = {
@@ -371,6 +393,11 @@ type FinancialVoucherPreview = {
   grossPayableAmount: number;
   deductionAmount: number;
   netPayableAmount: number;
+  roundedOffAmount: number;
+  finalPayableAmount: number;
+  totalPaidAmount: number;
+  balanceAmount: number;
+  lastPaymentDate: string;
   status: string;
   remarks: string;
   lines: {
@@ -382,6 +409,14 @@ type FinancialVoucherPreview = {
     bags: number;
     grossQtyQtl: number;
     netQtyQtl: number;
+  }[];
+  payments: {
+    id: string;
+    paymentDate: string;
+    amount: number;
+    transactionNo: string;
+    mode: string;
+    remarks: string;
   }[];
 };
 
@@ -601,6 +636,40 @@ export class SeedService {
       passwordHash?: string;
       isActive: boolean;
     } | null>();
+  }
+
+  private async verifyAdminPassword(adminPassword?: string) {
+    const password = String(adminPassword ?? "").trim();
+    if (!password) {
+      throw new Error("Admin password is required for this action.");
+    }
+
+    const adminUser = await this.findActiveUser("admin", "ADMIN");
+    if (!adminUser || String(adminUser.passwordHash ?? "") !== password) {
+      throw new Error("Admin password is invalid.");
+    }
+  }
+
+  private buildVoucherPaymentSummary(
+    payments: {
+      paymentDate: string;
+      amount: number;
+    }[],
+    finalPayableAmount: number
+  ) {
+    const totalPaidAmount = roundQtl(
+      payments.reduce((sum, item) => sum + Number(item.amount ?? 0), 0)
+    );
+    const sortedDates = payments
+      .map((item) => String(item.paymentDate ?? ""))
+      .filter(Boolean)
+      .sort();
+    return {
+      totalPaidAmount,
+      balanceAmount: roundQtl(Math.max(finalPayableAmount - totalPaidAmount, 0)),
+      lastPaymentDate: sortedDates[sortedDates.length - 1] ?? "",
+      status: deriveVoucherStatus(finalPayableAmount, totalPaidAmount)
+    };
   }
 
   async loginUser(input: LoginInput) {
@@ -1713,6 +1782,14 @@ export class SeedService {
       (sum, item) => sum + Number(item.estimatedExcessBags ?? 0),
       0
     );
+    const existingPayments = (existingVoucher?.payments ?? []).map((payment) => ({
+      id: String(payment.id),
+      paymentDate: String(payment.paymentDate),
+      amount: roundQtl(Number(payment.amount ?? 0)),
+      transactionNo: String(payment.transactionNo ?? ""),
+      mode: String(payment.mode ?? "RTGS/NEFT"),
+      remarks: String(payment.remarks ?? "")
+    }));
     const certifiedQtyQtl = roundQtl(Math.max(totalNetQtyQtl - discrepancyQtyQtl, 0));
     const certifiedAmount = roundQtl(certifiedQtyQtl * input.certifiedRatePerQtl);
     const discrepancyAmount = roundQtl(discrepancyQtyQtl * input.discrepancyRatePerQtl);
@@ -1720,9 +1797,22 @@ export class SeedService {
     const netPayableAmount = roundQtl(
       Math.max(grossPayableAmount - Number(input.deductionAmount ?? 0), 0)
     );
+    const finalPayableAmount = Math.round(netPayableAmount);
+    const roundedOffAmount = roundQtl(finalPayableAmount - netPayableAmount);
+    const paymentSummary = this.buildVoucherPaymentSummary(existingPayments, finalPayableAmount);
+    const existingVoucherNos = existingVoucher
+      ? []
+      : (
+          await FinancialVoucherModel.find(
+            { season: registration.season, year: registration.year },
+            { voucherNo: 1, _id: 0 }
+          ).lean()
+        ).map((item) => String(item.voucherNo ?? ""));
     return {
       id: existingVoucher?.id ?? randomUUID(),
-      voucherNo: existingVoucher?.voucherNo ?? `FVP-${registration.cropRegistrationCode}`,
+      voucherNo:
+        existingVoucher?.voucherNo ??
+        nextVoucherNumber(existingVoucherNos, registration.season, registration.year),
       voucherDate: input.voucherDate,
       cropRegistrationId: registration.id,
       cropRegistrationCode: registration.cropRegistrationCode,
@@ -1750,7 +1840,12 @@ export class SeedService {
       grossPayableAmount,
       deductionAmount: roundQtl(Number(input.deductionAmount ?? 0)),
       netPayableAmount,
-      status: existingVoucher?.status ?? "DRAFT",
+      roundedOffAmount,
+      finalPayableAmount,
+      totalPaidAmount: paymentSummary.totalPaidAmount,
+      balanceAmount: paymentSummary.balanceAmount,
+      lastPaymentDate: paymentSummary.lastPaymentDate,
+      status: paymentSummary.status,
       remarks: input.remarks?.trim() || "",
       lines: receipts.map((receipt) => ({
         receiptId: String(receipt.id),
@@ -1784,7 +1879,8 @@ export class SeedService {
           )
         ),
         netQtyQtl: sumReceiptNetQty(receipt)
-      }))
+      })),
+      payments: existingPayments
     };
   }
 
@@ -1825,6 +1921,9 @@ export class SeedService {
     if (!existingVoucher) {
       throw new Error("Financial voucher not found.");
     }
+    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+      await this.verifyAdminPassword(input.adminPassword);
+    }
     if (existingVoucher.cropRegistrationId !== input.cropRegistrationId) {
       throw new Error("Voucher registration cannot be changed.");
     }
@@ -1852,6 +1951,137 @@ export class SeedService {
         cropRegistrationCode: preview.cropRegistrationCode,
         grossPayableAmount: preview.grossPayableAmount,
         netPayableAmount: preview.netPayableAmount
+      }
+    });
+
+    return this.bootstrap();
+  }
+
+  async markFinancialVoucherPaid(voucherId: string) {
+    await this.ensureCompatibility();
+    const existingVoucher = await FinancialVoucherModel.findOne({ id: voucherId }).lean();
+    if (!existingVoucher) {
+      throw new Error("Financial voucher not found.");
+    }
+    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+      throw new Error("Voucher is already marked as paid.");
+    }
+
+    const targetFinalPayable = roundQtl(
+      Number(existingVoucher.finalPayableAmount ?? existingVoucher.netPayableAmount ?? 0)
+    );
+    const paymentSummary = this.buildVoucherPaymentSummary(
+      [
+        ...((existingVoucher.payments ?? []).map((payment: { paymentDate?: unknown; amount?: unknown }) => ({
+          paymentDate: String(payment.paymentDate ?? ""),
+          amount: roundQtl(Number(payment.amount ?? 0))
+        }))),
+        {
+          paymentDate: new Date().toISOString().slice(0, 10),
+          amount: targetFinalPayable
+        }
+      ],
+      targetFinalPayable
+    );
+
+    await FinancialVoucherModel.updateOne(
+      { id: voucherId },
+      {
+        $set: {
+          status: paymentSummary.status
+        }
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "FINANCIAL_VOUCHER",
+      entityId: voucherId,
+      action: "MARKED_PAID",
+      payload: {
+        voucherNo: existingVoucher.voucherNo,
+        cropRegistrationCode: existingVoucher.cropRegistrationCode
+      }
+    });
+
+    return this.bootstrap();
+  }
+
+  async addFinancialVoucherPayment(voucherId: string, input: AddFinancialVoucherPaymentInput) {
+    await this.ensureCompatibility();
+    const existingVoucher = await FinancialVoucherModel.findOne({ id: voucherId }).lean();
+    if (!existingVoucher) {
+      throw new Error("Financial voucher not found.");
+    }
+
+    const payment = {
+      id: randomUUID(),
+      paymentDate: input.paymentDate,
+      amount: roundQtl(Number(input.amount ?? 0)),
+      transactionNo: input.transactionNo.trim(),
+      mode: "RTGS/NEFT",
+      remarks: input.remarks?.trim() || ""
+    };
+
+    const payments = [...(existingVoucher.payments ?? []), payment];
+    const finalPayableAmount = roundQtl(
+      Number(existingVoucher.finalPayableAmount ?? existingVoucher.netPayableAmount ?? 0)
+    );
+    const paymentSummary = this.buildVoucherPaymentSummary(
+      payments.map((item) => ({
+        paymentDate: String(item.paymentDate ?? ""),
+        amount: roundQtl(Number(item.amount ?? 0))
+      })),
+      finalPayableAmount
+    );
+
+    await FinancialVoucherModel.updateOne(
+      { id: voucherId },
+      {
+        $set: {
+          payments,
+          totalPaidAmount: paymentSummary.totalPaidAmount,
+          balanceAmount: paymentSummary.balanceAmount,
+          lastPaymentDate: paymentSummary.lastPaymentDate,
+          status: paymentSummary.status
+        }
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "FINANCIAL_VOUCHER",
+      entityId: voucherId,
+      action: "PAYMENT_ADDED",
+      payload: {
+        voucherNo: existingVoucher.voucherNo,
+        paymentDate: payment.paymentDate,
+        amount: payment.amount,
+        transactionNo: payment.transactionNo
+      }
+    });
+
+    return this.bootstrap();
+  }
+
+  async deleteFinancialVoucher(voucherId: string, input: FinancialVoucherActionInput) {
+    await this.ensureCompatibility();
+    const existingVoucher = await FinancialVoucherModel.findOne({ id: voucherId }).lean();
+    if (!existingVoucher) {
+      throw new Error("Financial voucher not found.");
+    }
+    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+      await this.verifyAdminPassword(input.adminPassword);
+    }
+
+    await FinancialVoucherModel.deleteOne({ id: voucherId });
+
+    await AuditLogModel.create({
+      entityType: "FINANCIAL_VOUCHER",
+      entityId: voucherId,
+      action: "DELETED",
+      payload: {
+        voucherNo: existingVoucher.voucherNo,
+        cropRegistrationCode: existingVoucher.cropRegistrationCode,
+        previousStatus: existingVoucher.status
       }
     });
 
@@ -2106,6 +2336,78 @@ export class SeedService {
       };
     }
 
+    if (reportType === "DISTRICT_WISE_DETAIL") {
+      const sortedRows = [...rows].sort((left, right) => {
+        const districtCompare = String(left.district).localeCompare(String(right.district), "en", {
+          sensitivity: "base"
+        });
+        if (districtCompare !== 0) {
+          return districtCompare;
+        }
+        const farmerCompare = String(left.farmerName).localeCompare(String(right.farmerName), "en", {
+          sensitivity: "base"
+        });
+        if (farmerCompare !== 0) {
+          return farmerCompare;
+        }
+        const regCompare = String(left.cropRegistrationCode).localeCompare(
+          String(right.cropRegistrationCode),
+          "en",
+          { sensitivity: "base", numeric: true }
+        );
+        if (regCompare !== 0) {
+          return regCompare;
+        }
+        return String(left.receiptDate).localeCompare(String(right.receiptDate));
+      });
+
+      const previewRows = sortedRows.map((row, index) => ({
+        "S.No.": index + 1,
+        District: row.district,
+        Block: row.block,
+        Village: row.village,
+        "Reg. Code": row.cropRegistrationCode,
+        "Seed Grower": row.farmerName,
+        "F/H Name": row.fatherName,
+        Crop: row.crop,
+        Variety: row.variety,
+        "Class/Stage": row.classStage,
+        "Expected Yield (QTL)": row.expectedYieldQtl,
+        Date: row.receiptDate,
+        "Receipt No.": row.receiptNo,
+        Godown: row.godownName,
+        "Stack No.": row.stackNo,
+        Vehicle: row.vehicleNo,
+        Bags: row.noOfBags,
+        "Wt/Bag (KG)": row.weightPerBagKg,
+        "Gross (QTL)": row.grossWeightQtl,
+        "Net (QTL)": row.netWeightQtl,
+        "Moisture (%)": row.moisturePercent,
+        "Lot No.": row.lotCodes.join(", "),
+        "Discrepancy Qty (QTL)": row.discrepancyNetQtl,
+        Remarks: row.remarks || "-"
+      }));
+
+      return {
+        reportType,
+        title: "District Wise Detail",
+        columns: Object.keys(previewRows[0] ?? { "S.No.": 1 }),
+        rows: previewRows,
+        totals: {
+          "Total Rows": previewRows.length,
+          "Total Districts": new Set(rows.map((row) => row.district).filter(Boolean)).size,
+          "Total Bags": rows.reduce((sum, row) => sum + row.noOfBags, 0),
+          "Total Gross (QTL)": roundQtl(rows.reduce((sum, row) => sum + row.grossWeightQtl, 0)),
+          "Total Net (QTL)": roundQtl(rows.reduce((sum, row) => sum + row.netWeightQtl, 0)),
+          "Total Discrepancy Qty (QTL)": roundQtl(
+            rows.reduce((sum, row) => sum + row.discrepancyNetQtl, 0)
+          )
+        },
+        generatedAt,
+        fileName: formatReportFileName(season, "district-wise-detail")
+      };
+    }
+
     if (reportType === "FARMER_WISE_DETAIL") {
       const previewRows = rows.map((row, index) => ({
         "S.No.": index + 1,
@@ -2143,6 +2445,66 @@ export class SeedService {
         },
         generatedAt,
         fileName: formatReportFileName(season, "farmer-wise-detail")
+      };
+    }
+
+    if (reportType === "OVERALL_INTAKE") {
+      const grouped = new Map<string, BaseReceiptRow>();
+      for (const row of rows) {
+        if (!grouped.has(row.cropRegistrationId)) {
+          grouped.set(row.cropRegistrationId, row);
+        }
+      }
+
+      const previewRows = Array.from(grouped.values())
+        .sort((left, right) => {
+          const districtCompare = String(left.district).localeCompare(String(right.district), "en", {
+            sensitivity: "base"
+          });
+          if (districtCompare !== 0) {
+            return districtCompare;
+          }
+          const farmerCompare = String(left.farmerName).localeCompare(String(right.farmerName), "en", {
+            sensitivity: "base"
+          });
+          if (farmerCompare !== 0) {
+            return farmerCompare;
+          }
+          return String(left.cropRegistrationCode).localeCompare(String(right.cropRegistrationCode), "en", {
+            sensitivity: "base",
+            numeric: true
+          });
+        })
+        .map((row, index) => ({
+          "S.No.": index + 1,
+          "Farmer Name": row.farmerName,
+          "Father Name": row.fatherName,
+          Village: row.village,
+          District: row.district,
+          "Expected Yield (QTL)": row.expectedYieldQtl,
+          "Net Intake Qty (QTL)": row.registrationReceivedQtl,
+          "Balance Qty (QTL)": row.registrationBalanceQtl
+        }));
+
+      return {
+        reportType,
+        title: "Overall Intake",
+        columns: Object.keys(previewRows[0] ?? { "S.No.": 1 }),
+        rows: previewRows,
+        totals: {
+          "Total Farmers": previewRows.length,
+          "Total Expected Yield (QTL)": roundQtl(
+            previewRows.reduce((sum, row) => sum + Number(row["Expected Yield (QTL)"] ?? 0), 0)
+          ),
+          "Total Net Intake Qty (QTL)": roundQtl(
+            previewRows.reduce((sum, row) => sum + Number(row["Net Intake Qty (QTL)"] ?? 0), 0)
+          ),
+          "Total Balance Qty (QTL)": roundQtl(
+            previewRows.reduce((sum, row) => sum + Number(row["Balance Qty (QTL)"] ?? 0), 0)
+          )
+        },
+        generatedAt,
+        fileName: formatReportFileName(season, "overall-intake")
       };
     }
 
@@ -2391,6 +2753,90 @@ export class SeedService {
       };
     }
 
+    if (reportType === "STACK_CARD_REGISTER") {
+      const grouped = new Map<
+        string,
+        {
+          godownName: string;
+          stackNo: string;
+          farmerName: string;
+          regCode: string;
+          bags: number;
+          netQtl: number;
+        }
+      >();
+
+      for (const row of rows) {
+        const key = `${row.godownName}|${row.stackNo}|${row.cropRegistrationCode}`;
+        const current = grouped.get(key) ?? {
+          godownName: row.godownName,
+          stackNo: row.stackNo,
+          farmerName: row.farmerName,
+          regCode: row.cropRegistrationCode,
+          bags: 0,
+          netQtl: 0
+        };
+        current.bags += row.noOfBags;
+        current.netQtl = roundQtl(current.netQtl + row.netWeightQtl);
+        grouped.set(key, current);
+      }
+
+      const previewRows = Array.from(grouped.values())
+        .sort((left, right) => {
+          const godownCompare = left.godownName.localeCompare(right.godownName, "en", {
+            sensitivity: "base"
+          });
+          if (godownCompare !== 0) {
+            return godownCompare;
+          }
+          const stackCompare = left.stackNo.localeCompare(right.stackNo, "en", {
+            sensitivity: "base",
+            numeric: true
+          });
+          if (stackCompare !== 0) {
+            return stackCompare;
+          }
+          return left.regCode.localeCompare(right.regCode, "en", {
+            sensitivity: "base",
+            numeric: true
+          });
+        })
+        .map((item, index) => ({
+          "S.No.": index + 1,
+          Godown: item.godownName,
+          Stack: item.stackNo,
+          "FARMER NAME": item.farmerName,
+          "FARMER REG CODE": item.regCode,
+          "NUMBER OF BAGS IN STACK": item.bags,
+          "TOTAL NET WEIGHT IN STACK (QTL)": item.netQtl
+        }));
+
+      return {
+        reportType,
+        title: "Stack Card Register",
+        columns: Object.keys(previewRows[0] ?? { "S.No.": 1 }),
+        rows: previewRows,
+        totals: {
+          "Total Rows": previewRows.length,
+          "Total Stacks": new Set(
+            previewRows.map((row) => `${String(row.Godown)}|${String(row.Stack)}`)
+          ).size,
+          "Total Bags": previewRows.reduce(
+            (sum, row) => sum + Number(row["NUMBER OF BAGS IN STACK"] ?? 0),
+            0
+          ),
+          "Total Net (QTL)": roundQtl(
+            previewRows.reduce(
+              (sum, row) => sum + Number(row["TOTAL NET WEIGHT IN STACK (QTL)"] ?? 0),
+              0
+            )
+          )
+        },
+        generatedAt,
+        fileName: formatReportFileName(season, "stack-card-register")
+      };
+    }
+
     const discrepancyRows = rows
       .filter((row) => row.discrepancyNetQtl > 0 || row.discrepancyStatus !== "RESOLVED")
       .map((row, index) => ({
@@ -2430,6 +2876,7 @@ export class SeedService {
 
   private buildWorkbook(previews: ReportPreview[]) {
     const workbook = XLSX.utils.book_new();
+    const usedSheetNames = new Set<string>();
 
     for (const preview of previews) {
       const rows: (string | number)[][] = [];
@@ -2447,7 +2894,15 @@ export class SeedService {
       }
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      const sheetName = preview.title.slice(0, 31);
+      const baseSheetName = preview.title.slice(0, 31) || "Report";
+      let sheetName = baseSheetName;
+      let duplicateCounter = 2;
+      while (usedSheetNames.has(sheetName)) {
+        const suffix = `-${duplicateCounter}`;
+        sheetName = `${baseSheetName.slice(0, Math.max(31 - suffix.length, 1))}${suffix}`;
+        duplicateCounter += 1;
+      }
+      usedSheetNames.add(sheetName);
       XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     }
 
@@ -2461,12 +2916,65 @@ export class SeedService {
 
   async exportReports(filters: ReportFilterInput) {
     const rows = await this.buildBaseReceiptRows(filters);
-    const preview = this.buildPreviewFromRows(filters.reportType as ReportType, rows, filters);
-    const workbook = this.buildWorkbook([preview]);
+    let previews: ReportPreview[];
+
+    if ((filters.reportType as ReportType) === "DISTRICT_WISE_DETAIL") {
+      const districtGroups = new Map<string, BaseReceiptRow[]>();
+
+      for (const row of rows) {
+        const districtKey = String(row.district || "UNSPECIFIED").trim() || "UNSPECIFIED";
+        districtGroups.set(districtKey, [...(districtGroups.get(districtKey) ?? []), row]);
+      }
+
+      previews = Array.from(districtGroups.entries())
+        .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+        .map(([district, districtRows]) => {
+          const preview = this.buildPreviewFromRows("DISTRICT_WISE_DETAIL", districtRows, {
+            ...filters,
+            district
+          });
+          return {
+            ...preview,
+            title: district || "UNSPECIFIED"
+          };
+        });
+
+      if (previews.length === 0) {
+        previews = [this.buildPreviewFromRows("DISTRICT_WISE_DETAIL", rows, filters)];
+      }
+    } else if ((filters.reportType as ReportType) === "STACK_CARD_REGISTER") {
+      const stackGroups = new Map<string, BaseReceiptRow[]>();
+
+      for (const row of rows) {
+        const key = `${String(row.godownName || "UNSPECIFIED").trim() || "UNSPECIFIED"}|${String(
+          row.stackNo || "UNSPECIFIED"
+        ).trim() || "UNSPECIFIED"}`;
+        stackGroups.set(key, [...(stackGroups.get(key) ?? []), row]);
+      }
+
+      previews = Array.from(stackGroups.entries())
+        .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base", numeric: true }))
+        .map(([stackKey, stackRows]) => {
+          const [godownName, stackNo] = stackKey.split("|");
+          const preview = this.buildPreviewFromRows("STACK_CARD_REGISTER", stackRows, filters);
+          return {
+            ...preview,
+            title: `${godownName} - Stack ${stackNo}`
+          };
+        });
+
+      if (previews.length === 0) {
+        previews = [this.buildPreviewFromRows("STACK_CARD_REGISTER", rows, filters)];
+      }
+    } else {
+      previews = [this.buildPreviewFromRows(filters.reportType as ReportType, rows, filters)];
+    }
+
+    const workbook = this.buildWorkbook(previews);
     const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 
     return {
-      fileName: preview.fileName,
+      fileName: previews[0]?.fileName ?? formatReportFileName(filters.season?.trim() || "ALL_SEASONS", "report"),
       content: buffer
     };
   }

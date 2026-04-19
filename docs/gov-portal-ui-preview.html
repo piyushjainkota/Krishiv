@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KRISHIV Government Portal UI Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              gov: {
+                blue: "#163a63",
+                blueDark: "#0f2742",
+                green: "#2f6b3b",
+                greenSoft: "#edf5ef",
+                border: "#b9c2cc",
+                panel: "#f6f8fa",
+                text: "#1f2933",
+                muted: "#5b6773"
+              }
+            },
+            boxShadow: {
+              gov: "0 1px 2px rgba(15, 39, 66, 0.08)"
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body {
+        font-family: Arial, Roboto, sans-serif;
+      }
+
+      .gov-table th,
+      .gov-table td {
+        border: 1px solid #b9c2cc;
+      }
+
+      .scroll-slim::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+
+      .scroll-slim::-webkit-scrollbar-thumb {
+        background: #a9b4bf;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-100 text-gov-text">
+    <div class="min-h-screen">
+      <header class="border-b-4 border-gov-green bg-gov-blue text-white">
+        <div class="flex flex-col gap-4 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex items-center gap-4">
+            <div class="flex h-14 w-14 items-center justify-center border border-white/30 bg-white/10 text-xs font-bold leading-tight text-center">
+              GOI<br />SEED
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-[0.25em] text-slate-200">Government Style Preview</p>
+              <h1 class="text-xl font-bold leading-tight">KRISHIV Seed Tracking and Stock Management System</h1>
+              <p class="text-sm text-slate-200">Seed intake, lot management, discrepancy handling, reporting and certification workflow</p>
+            </div>
+          </div>
+          <div class="grid gap-2 text-sm md:grid-cols-3">
+            <div class="border border-white/20 bg-white/10 px-3 py-2">
+              <div class="text-xs uppercase text-slate-200">Season</div>
+              <div class="font-semibold">RABI 2025-26</div>
+            </div>
+            <div class="border border-white/20 bg-white/10 px-3 py-2">
+              <div class="text-xs uppercase text-slate-200">Logged In User</div>
+              <div class="font-semibold">System Admin</div>
+            </div>
+            <div class="border border-white/20 bg-white/10 px-3 py-2">
+              <div class="text-xs uppercase text-slate-200">Office</div>
+              <div class="font-semibold">Piyush Associates Unit</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="border-t border-white/15 bg-gov-blueDark px-4">
+          <div class="flex flex-wrap gap-x-5 gap-y-2 py-3 text-sm font-semibold">
+            <a href="#dashboard" class="text-white underline-offset-4 hover:underline">Dashboard</a>
+            <a href="#farmer-master" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Farmer Registration</a>
+            <a href="#crop-registration" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Crop Registration</a>
+            <a href="#lot-entry" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Lot Management</a>
+            <a href="#stock-inward" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Stock Inward</a>
+            <a href="#stock-outward" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Stock Outward</a>
+            <a href="#lot-tracking" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Lot Tracking</a>
+            <a href="#approval-workflow" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Certification</a>
+            <a href="#reports" class="text-slate-200 underline-offset-4 hover:text-white hover:underline">Reports</a>
+          </div>
+        </nav>
+      </header>
+
+      <main class="px-4 py-4 lg:px-5">
+        <div class="mb-4 border border-gov-border bg-white px-4 py-2 text-sm shadow-gov">
+          <span class="font-semibold text-gov-muted">Breadcrumb:</span>
+          <span class="ml-2">Home</span>
+          <span class="mx-2 text-gov-muted">/</span>
+          <span>Seed Stock Management</span>
+          <span class="mx-2 text-gov-muted">/</span>
+          <span class="font-semibold text-gov-blue">Dashboard</span>
+        </div>
+
+        <section id="dashboard" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Dashboard</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div class="border border-gov-border bg-white p-3">
+                <div class="text-xs uppercase text-gov-muted">Total Stock (Net QTL)</div>
+                <div class="mt-2 text-2xl font-bold">6,135.62</div>
+              </div>
+              <div class="border border-gov-border bg-white p-3">
+                <div class="text-xs uppercase text-gov-muted">Pending Approvals</div>
+                <div class="mt-2 text-2xl font-bold">16</div>
+              </div>
+              <div class="border border-gov-border bg-white p-3">
+                <div class="text-xs uppercase text-gov-muted">Lots Created</div>
+                <div class="mt-2 text-2xl font-bold">144</div>
+              </div>
+              <div class="border border-gov-border bg-white p-3">
+                <div class="text-xs uppercase text-gov-muted">Inspection Pending</div>
+                <div class="mt-2 text-2xl font-bold">6</div>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <div class="border border-gov-border">
+                <div class="border-b border-gov-border bg-gov-panel px-3 py-2 text-sm font-semibold text-gov-blue">
+                  Recent Operational Summary
+                </div>
+                <div class="overflow-x-auto scroll-slim">
+                  <table class="gov-table min-w-full text-sm">
+                    <thead class="bg-slate-50 text-gov-blue">
+                      <tr>
+                        <th class="px-3 py-2 text-left font-semibold">Module</th>
+                        <th class="px-3 py-2 text-left font-semibold">Current Position</th>
+                        <th class="px-3 py-2 text-left font-semibold">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="px-3 py-2">Intake Entry</td>
+                        <td class="px-3 py-2">115 receipts entered</td>
+                        <td class="px-3 py-2">Receipt line based intake running</td>
+                      </tr>
+                      <tr>
+                        <td class="px-3 py-2">Discrepancy Register</td>
+                        <td class="px-3 py-2">16 open/recorded cases</td>
+                        <td class="px-3 py-2">Excess stock pending review and shifting</td>
+                      </tr>
+                      <tr>
+                        <td class="px-3 py-2">Financial Voucher</td>
+                        <td class="px-3 py-2">3 vouchers generated</td>
+                        <td class="px-3 py-2">Dual rate logic available for discrepancy</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="border border-gov-border">
+                <div class="border-b border-gov-border bg-gov-panel px-3 py-2 text-sm font-semibold text-gov-blue">
+                  Pending Work Queue
+                </div>
+                <div class="space-y-2 p-3 text-sm">
+                  <div class="border border-gov-border bg-gov-greenSoft px-3 py-2">
+                    Daily intake report for 15-04-2026 pending export
+                  </div>
+                  <div class="border border-gov-border bg-slate-50 px-3 py-2">
+                    Lot 2025-26/R25-13-1199/L2 pending discrepancy review
+                  </div>
+                  <div class="border border-gov-border bg-slate-50 px-3 py-2">
+                    Voucher verification pending for DINESH KUMAR NAGAR
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="farmer-master" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Farmer Master Form</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-4 xl:grid-cols-2">
+              <div class="border border-gov-border">
+                <div class="border-b border-gov-border bg-slate-50 px-3 py-2 text-sm font-semibold text-gov-blue">Farmer Details</div>
+                <div class="grid gap-3 p-3 md:grid-cols-2">
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Farmer Name</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="Nasir Husain" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Father / Husband Name</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="Abdul Vahid" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Village</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="Jetpura" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">District</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="Baran" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="border border-gov-border">
+                <div class="border-b border-gov-border bg-slate-50 px-3 py-2 text-sm font-semibold text-gov-blue">Crop Registration Details</div>
+                <div class="grid gap-3 p-3 md:grid-cols-2">
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Reg. Code</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="R25-4-563" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Crop Code</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="WHT-R4037" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Variety</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="RAJ-4037" />
+                  </label>
+                  <label class="text-sm">
+                    <div class="mb-1 font-semibold">Expected Yield (QTL)</div>
+                    <input class="w-full border border-gov-border px-3 py-2" value="222.95" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button class="border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Save</button>
+              <button class="border border-slate-400 bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">Reset</button>
+              <button class="border border-gov-green bg-gov-green px-4 py-2 text-sm font-semibold text-white">Verify</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="crop-registration" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Crop Registration Screen</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Season</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>RABI 2025-26</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">District</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Baran</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Crop</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Wheat</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Variety</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>RAJ-4037</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Class</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Foundation I to Certified I</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Status</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Active</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section id="lot-entry" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Lot Entry Form</h2>
+          </div>
+          <div class="grid gap-4 p-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <div class="border border-gov-border">
+              <div class="border-b border-gov-border bg-slate-50 px-3 py-2 text-sm font-semibold text-gov-blue">Lot Details</div>
+              <div class="grid gap-3 p-3 md:grid-cols-2">
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Lot No.</div>
+                  <input class="w-full border border-gov-border px-3 py-2" value="2025-26/R25-4-563/L2" />
+                </label>
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Stack No.</div>
+                  <input class="w-full border border-gov-border px-3 py-2" value="03" />
+                </label>
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Bags</div>
+                  <input class="w-full border border-gov-border px-3 py-2" value="34" />
+                </label>
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Net Qty (QTL)</div>
+                  <input class="w-full border border-gov-border px-3 py-2" value="19.96" />
+                </label>
+              </div>
+            </div>
+
+            <div class="border border-gov-border">
+              <div class="border-b border-gov-border bg-slate-50 px-3 py-2 text-sm font-semibold text-gov-blue">Certification Information</div>
+              <div class="grid gap-3 p-3 md:grid-cols-2">
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Inspection Status</div>
+                  <select class="w-full border border-gov-border px-3 py-2">
+                    <option>Under Inspection</option>
+                  </select>
+                </label>
+                <label class="text-sm">
+                  <div class="mb-1 font-semibold">Certification Status</div>
+                  <select class="w-full border border-gov-border px-3 py-2">
+                    <option>Pending</option>
+                  </select>
+                </label>
+                <label class="text-sm md:col-span-2">
+                  <div class="mb-1 font-semibold">Remarks</div>
+                  <textarea class="min-h-24 w-full border border-gov-border px-3 py-2">Excess quantity under discrepancy review.</textarea>
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="stock-inward" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Stock Inward Screen</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Receipt Date</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="15-04-2026" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Reg. Code</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="R25-4-563" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Godown</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Piyush Associates</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Stack No.</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="03" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Gross Weight</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="109.75" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Bags</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="200" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Net Weight</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="108.23" />
+              </label>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button class="border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Submit</button>
+              <button class="border border-slate-400 bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">Save Draft</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="stock-outward" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Stock Outward Screen</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Lot No.</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="2025-26/R25-4-429/L1" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Dispatch Qty</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="20.00" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Bags</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="34" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Destination</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="State Seed Depot" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Status</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Approved</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section id="lot-tracking" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Lot Tracking Page</h2>
+          </div>
+          <div class="p-4">
+            <div class="mb-3 grid gap-3 md:grid-cols-4">
+              <input class="border border-gov-border px-3 py-2 text-sm" value="Search by lot no / reg. code / farmer" />
+              <select class="border border-gov-border px-3 py-2 text-sm">
+                <option>All Status</option>
+              </select>
+              <select class="border border-gov-border px-3 py-2 text-sm">
+                <option>All Godowns</option>
+              </select>
+              <button class="border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Search</button>
+            </div>
+
+            <div class="overflow-x-auto scroll-slim">
+              <table class="gov-table min-w-full text-sm">
+                <thead class="bg-slate-50 text-gov-blue">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-semibold">Lot No.</th>
+                    <th class="px-3 py-2 text-left font-semibold">Farmer Name</th>
+                    <th class="px-3 py-2 text-left font-semibold">Crop Code</th>
+                    <th class="px-3 py-2 text-left font-semibold">Quantity</th>
+                    <th class="px-3 py-2 text-left font-semibold">Status</th>
+                    <th class="px-3 py-2 text-left font-semibold">Inspection</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="px-3 py-2">2025-26/R25-4-563/L2</td>
+                    <td class="px-3 py-2">Nasir Husain</td>
+                    <td class="px-3 py-2">WHT-R4037</td>
+                    <td class="px-3 py-2">19.96 QTL</td>
+                    <td class="px-3 py-2"><span class="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Under Inspection</span></td>
+                    <td class="px-3 py-2">Pending</td>
+                  </tr>
+                  <tr>
+                    <td class="px-3 py-2">2025-26/R25-4-429/L1</td>
+                    <td class="px-3 py-2">Amarchand</td>
+                    <td class="px-3 py-2">WHT-R4037</td>
+                    <td class="px-3 py-2">41.78 QTL</td>
+                    <td class="px-3 py-2"><span class="border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">Approved</span></td>
+                    <td class="px-3 py-2">Completed</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="approval-workflow" class="mb-5 border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Approval Workflow Page</h2>
+          </div>
+          <div class="grid gap-4 p-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <div class="overflow-x-auto scroll-slim">
+              <table class="gov-table min-w-full text-sm">
+                <thead class="bg-slate-50 text-gov-blue">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-semibold">Case Type</th>
+                    <th class="px-3 py-2 text-left font-semibold">Reference</th>
+                    <th class="px-3 py-2 text-left font-semibold">Current Status</th>
+                    <th class="px-3 py-2 text-left font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="px-3 py-2">Discrepancy</td>
+                    <td class="px-3 py-2">R25-13-1199 / Receipt 071</td>
+                    <td class="px-3 py-2"><span class="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Pending</span></td>
+                    <td class="px-3 py-2">
+                      <div class="flex flex-wrap gap-2">
+                        <button class="border border-gov-green bg-gov-green px-3 py-1.5 text-xs font-semibold text-white">Approve</button>
+                        <button class="border border-rose-600 bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white">Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="px-3 py-2">Voucher</td>
+                    <td class="px-3 py-2">FVP-R25-13-987</td>
+                    <td class="px-3 py-2"><span class="border border-slate-300 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800">Under Verification</span></td>
+                    <td class="px-3 py-2">
+                      <div class="flex flex-wrap gap-2">
+                        <button class="border border-gov-blue bg-gov-blue px-3 py-1.5 text-xs font-semibold text-white">Verify</button>
+                        <button class="border border-slate-400 bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800">Hold</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="border border-gov-border">
+              <div class="border-b border-gov-border bg-slate-50 px-3 py-2 text-sm font-semibold text-gov-blue">Decision Note</div>
+              <div class="p-3">
+                <textarea class="min-h-40 w-full border border-gov-border px-3 py-2 text-sm">Discrepancy quantity to be shifted to non-certification stack after review. Payment may proceed using discrepancy rate.</textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button class="border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Save</button>
+                  <button class="border border-slate-400 bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="reports" class="border border-gov-border bg-white shadow-gov">
+          <div class="border-b border-gov-border bg-gov-panel px-4 py-2">
+            <h2 class="text-base font-bold text-gov-blue">Reports Page</h2>
+          </div>
+          <div class="p-4">
+            <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Report Type</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Daily Intake Register</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">From Date</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="15-04-2026" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">To Date</div>
+                <input class="w-full border border-gov-border px-3 py-2" value="15-04-2026" />
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">District</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Baran</option>
+                </select>
+              </label>
+              <label class="text-sm">
+                <div class="mb-1 font-semibold">Godown</div>
+                <select class="w-full border border-gov-border px-3 py-2">
+                  <option>Piyush Associates</option>
+                </select>
+              </label>
+              <div class="flex items-end gap-2">
+                <button class="flex-1 border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Search</button>
+                <button class="flex-1 border border-slate-400 bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">Reset</button>
+              </div>
+            </div>
+
+            <div class="mt-4 overflow-x-auto scroll-slim">
+              <table class="gov-table min-w-full text-sm">
+                <thead class="bg-slate-50 text-gov-blue">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-semibold">Date</th>
+                    <th class="px-3 py-2 text-left font-semibold">Receipt No.</th>
+                    <th class="px-3 py-2 text-left font-semibold">Lot No.</th>
+                    <th class="px-3 py-2 text-left font-semibold">Farmer Name</th>
+                    <th class="px-3 py-2 text-left font-semibold">Crop Code</th>
+                    <th class="px-3 py-2 text-left font-semibold">Quantity</th>
+                    <th class="px-3 py-2 text-left font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="px-3 py-2">15-04-2026</td>
+                    <td class="px-3 py-2">115</td>
+                    <td class="px-3 py-2">2025-26/R25-4-429/L1</td>
+                    <td class="px-3 py-2">Amarchand</td>
+                    <td class="px-3 py-2">WHT-R4037</td>
+                    <td class="px-3 py-2">41.78 QTL</td>
+                    <td class="px-3 py-2"><span class="border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">Approved</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button class="border border-gov-blue bg-gov-blue px-4 py-2 text-sm font-semibold text-white">Download Excel</button>
+              <button class="border border-gov-green bg-gov-green px-4 py-2 text-sm font-semibold text-white">Download PDF</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

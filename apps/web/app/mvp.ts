@@ -160,6 +160,15 @@ export interface FinancialVoucherLine {
   netQtyQtl: number;
 }
 
+export interface FinancialVoucherPayment {
+  id: string;
+  paymentDate: string;
+  amount: number;
+  transactionNo: string;
+  mode: string;
+  remarks: string;
+}
+
 export interface FinancialVoucher {
   id: string;
   voucherNo: string;
@@ -190,9 +199,15 @@ export interface FinancialVoucher {
   grossPayableAmount: number;
   deductionAmount: number;
   netPayableAmount: number;
+  roundedOffAmount: number;
+  finalPayableAmount: number;
+  totalPaidAmount: number;
+  balanceAmount: number;
+  lastPaymentDate?: string;
   status: string;
   remarks: string;
   lines: FinancialVoucherLine[];
+  payments: FinancialVoucherPayment[];
   createdAt?: string;
 }
 

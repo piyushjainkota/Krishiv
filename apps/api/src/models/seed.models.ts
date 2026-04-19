@@ -242,6 +242,18 @@ const FinancialVoucherLineSchema = new Schema(
   { _id: false }
 );
 
+const FinancialVoucherPaymentSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    paymentDate: { type: String, required: true },
+    amount: { type: Number, required: true },
+    transactionNo: { type: String, required: true },
+    mode: { type: String, required: true, default: "RTGS/NEFT" },
+    remarks: { type: String, default: "" }
+  },
+  { _id: false }
+);
+
 const FinancialVoucherSchema = new Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -273,9 +285,15 @@ const FinancialVoucherSchema = new Schema(
     grossPayableAmount: { type: Number, required: true },
     deductionAmount: { type: Number, required: true, default: 0 },
     netPayableAmount: { type: Number, required: true },
+    roundedOffAmount: { type: Number, required: true, default: 0 },
+    finalPayableAmount: { type: Number, required: true, default: 0 },
+    totalPaidAmount: { type: Number, required: true, default: 0 },
+    balanceAmount: { type: Number, required: true, default: 0 },
+    lastPaymentDate: { type: String, default: "" },
     status: { type: String, required: true, default: "DRAFT" },
     remarks: { type: String, default: "" },
-    lines: { type: [FinancialVoucherLineSchema], default: [] }
+    lines: { type: [FinancialVoucherLineSchema], default: [] },
+    payments: { type: [FinancialVoucherPaymentSchema], default: [] }
   },
   { timestamps: true }
 );

@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
+  addFinancialVoucherPaymentSchema,
   backupDatabaseSchema,
   createDiscrepancyShiftSchema,
   createFinancialVoucherSchema,
   createGodownSchema,
   createReceiptSchema,
   createStackSchema,
+  financialVoucherActionSchema,
   importRegistrationsSchema,
   loginSchema,
   reportFilterSchema,
@@ -163,6 +165,45 @@ export async function registerSeedRoutes(app: FastifyInstance) {
     }
     const voucherId = String((request.params as { voucherId: string }).voucherId);
     return seedService.updateFinancialVoucher(voucherId, parsed.data);
+  });
+
+  app.post("/api/seed/financial-vouchers/:voucherId/paid", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = financialVoucherActionSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const voucherId = String((request.params as { voucherId: string }).voucherId);
+    return seedService.markFinancialVoucherPaid(voucherId);
+  });
+
+  app.delete("/api/seed/financial-vouchers/:voucherId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = financialVoucherActionSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const voucherId = String((request.params as { voucherId: string }).voucherId);
+    return seedService.deleteFinancialVoucher(voucherId, parsed.data);
+  });
+
+  app.post("/api/seed/financial-vouchers/:voucherId/payments", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = addFinancialVoucherPaymentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const voucherId = String((request.params as { voucherId: string }).voucherId);
+    return seedService.addFinancialVoucherPayment(voucherId, parsed.data);
   });
 
   app.post("/api/seed/reports/preview", async (request, reply) => {

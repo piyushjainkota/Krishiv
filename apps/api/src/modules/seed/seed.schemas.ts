@@ -86,7 +86,20 @@ export const createFinancialVoucherSchema = z.object({
   remarks: z.string().optional().default("")
 });
 
-export const updateFinancialVoucherSchema = createFinancialVoucherSchema;
+export const updateFinancialVoucherSchema = createFinancialVoucherSchema.extend({
+  adminPassword: z.string().optional().default("")
+});
+
+export const financialVoucherActionSchema = z.object({
+  adminPassword: z.string().optional().default("")
+});
+
+export const addFinancialVoucherPaymentSchema = z.object({
+  paymentDate: z.string().min(1),
+  amount: z.number().nonnegative(),
+  transactionNo: z.string().trim().min(1),
+  remarks: z.string().optional().default("")
+});
 
 export const loginSchema = z.object({
   email: z.string().trim().min(1),
@@ -104,12 +117,15 @@ export const restoreDatabaseSchema = z.object({
 export const reportFilterSchema = z.object({
   reportType: z.enum([
     "GODOWN_WISE_DETAIL",
+    "DISTRICT_WISE_DETAIL",
     "FARMER_WISE_DETAIL",
+    "OVERALL_INTAKE",
     "SUMMARY",
     "DAILY_INTAKE_REGISTER",
     "REGISTRATION_PENDING_RECEIVED",
     "LOT_WISE_STOCK_LEDGER",
     "STACK_WISE_STOCK_POSITION",
+    "STACK_CARD_REGISTER",
     "DISCREPANCY_REGISTER"
   ]),
   season: z.string().optional().default(""),
@@ -138,6 +154,8 @@ export type UpdateReceiptInput = z.infer<typeof updateReceiptSchema>;
 export type CreateDiscrepancyShiftInput = z.infer<typeof createDiscrepancyShiftSchema>;
 export type CreateFinancialVoucherInput = z.infer<typeof createFinancialVoucherSchema>;
 export type UpdateFinancialVoucherInput = z.infer<typeof updateFinancialVoucherSchema>;
+export type FinancialVoucherActionInput = z.infer<typeof financialVoucherActionSchema>;
+export type AddFinancialVoucherPaymentInput = z.infer<typeof addFinancialVoucherPaymentSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type BackupDatabaseInput = z.infer<typeof backupDatabaseSchema>;
 export type RestoreDatabaseInput = z.infer<typeof restoreDatabaseSchema>;

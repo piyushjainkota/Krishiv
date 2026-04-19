@@ -8,6 +8,8 @@ coverage/
 mongodb-data/
 mongodb-log/
 mongo-backups*/
+atlas-migration-backup/
+exports/
 run-logs/
 
 *.log

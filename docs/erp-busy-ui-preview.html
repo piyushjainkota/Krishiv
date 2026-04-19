@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KRISHIV ERP Busy UI Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#f8f4ee",
+                100: "#efe4d5",
+                200: "#dcc0a0",
+                300: "#c99665",
+                400: "#b27340",
+                500: "#955725",
+                600: "#7c461d",
+                700: "#623715",
+                800: "#4d2d12",
+                900: "#2f1d0c"
+              }
+            },
+            boxShadow: {
+              panel: "0 10px 30px rgba(47, 29, 12, 0.08)"
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, sans-serif;
+      }
+
+      .scroll-slim::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      .scroll-slim::-webkit-scrollbar-thumb {
+        background: #d1c2af;
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body class="bg-stone-100 text-brand-900">
+    <div class="min-h-screen">
+      <header class="border-b border-brand-200 bg-white">
+        <div class="flex flex-col gap-4 px-6 py-4 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex items-start gap-4">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-700 text-lg font-bold text-white">
+              KA
+            </div>
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.3em] text-brand-500">Busy ERP Style Preview</p>
+              <h1 class="text-2xl font-bold">KRISHIV Seed Intake ERP</h1>
+              <p class="text-sm text-brand-600">Dense operator workspace for high-volume data entry and quick review</p>
+            </div>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+            <div class="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">Season</p>
+              <p class="text-sm font-semibold">RABI 2025-26</p>
+            </div>
+            <div class="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">Logged In</p>
+              <p class="text-sm font-semibold">System Admin</p>
+            </div>
+            <div class="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">Plant</p>
+              <p class="text-sm font-semibold">Piyush Associates</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="grid min-h-[calc(100vh-97px)] lg:grid-cols-[270px_minmax(0,1fr)]">
+        <aside class="border-r border-brand-200 bg-brand-900 px-4 py-5 text-brand-50">
+          <div class="mb-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-[11px] uppercase tracking-[0.25em] text-brand-200">Operations Menu</p>
+            <p class="mt-2 text-sm text-brand-100">This preview intentionally feels full, dense, and work-driven like a busy ERP desk.</p>
+          </div>
+
+          <nav class="space-y-2 text-sm">
+            <a class="flex items-center justify-between rounded-2xl bg-white px-4 py-3 font-semibold text-brand-800" href="#">
+              <span>Dashboard</span>
+              <span class="rounded-full bg-brand-100 px-2 py-1 text-xs">Live</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Registration Master</span>
+              <span class="text-xs text-brand-300">141</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Intake Entry</span>
+              <span class="text-xs text-brand-300">Desk</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Intake Edit</span>
+              <span class="text-xs text-brand-300">115</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Discrepancy Register</span>
+              <span class="text-xs text-amber-300">16</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Reports</span>
+              <span class="text-xs text-brand-300">Excel/PDF</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Financial Voucher</span>
+              <span class="text-xs text-brand-300">3</span>
+            </a>
+            <a class="flex items-center justify-between rounded-2xl px-4 py-3 text-brand-100 transition hover:bg-white/10" href="#">
+              <span>Masters</span>
+              <span class="text-xs text-brand-300">Admin</span>
+            </a>
+          </nav>
+
+          <div class="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">Work shortcuts</p>
+            <div class="mt-3 grid gap-2">
+              <button class="rounded-xl bg-brand-500 px-3 py-2 text-left text-sm font-semibold text-white">New Intake Receipt</button>
+              <button class="rounded-xl bg-white/10 px-3 py-2 text-left text-sm font-medium text-brand-100">Daily Intake Register</button>
+              <button class="rounded-xl bg-white/10 px-3 py-2 text-left text-sm font-medium text-brand-100">Restore / Backup</button>
+            </div>
+          </div>
+        </aside>
+
+        <main class="p-4 sm:p-6">
+          <section class="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
+            <div class="rounded-3xl border border-brand-200 bg-white p-5 shadow-panel">
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-brand-500">Operator Workspace</p>
+                  <h2 class="mt-1 text-xl font-bold">Fast Intake Entry Console</h2>
+                  <p class="mt-1 text-sm text-brand-600">Search registration, review farmer status, enter receipt line, and see validations without changing screen.</p>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span class="rounded-full bg-emerald-100 px-3 py-2 text-emerald-700">Active stack mapping</span>
+                  <span class="rounded-full bg-amber-100 px-3 py-2 text-amber-700">Discrepancy auto-check</span>
+                  <span class="rounded-full bg-sky-100 px-3 py-2 text-sky-700">Receipt-line posting</span>
+                </div>
+              </div>
+
+              <div class="mt-4 grid gap-3 md:grid-cols-4">
+                <div class="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3">
+                  <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Today Receipts</p>
+                  <p class="mt-2 text-2xl font-bold">23</p>
+                </div>
+                <div class="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3">
+                  <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Today Bags</p>
+                  <p class="mt-2 text-2xl font-bold">1,482</p>
+                </div>
+                <div class="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3">
+                  <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Pending Review</p>
+                  <p class="mt-2 text-2xl font-bold">6</p>
+                </div>
+                <div class="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3">
+                  <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Open Lots</p>
+                  <p class="mt-2 text-2xl font-bold">27</p>
+                </div>
+              </div>
+
+              <div class="mt-5 grid gap-5 xl:grid-cols-[1fr_1.1fr]">
+                <div class="rounded-3xl border border-brand-200 bg-stone-50 p-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">Registration Search</p>
+                      <h3 class="mt-1 text-lg font-bold">Current Registration Context</h3>
+                    </div>
+                    <button class="rounded-xl border border-brand-200 px-3 py-2 text-sm font-medium text-brand-700">Search</button>
+                  </div>
+
+                  <div class="mt-4 space-y-3">
+                    <input class="w-full rounded-2xl border border-brand-200 bg-white px-4 py-3 text-sm outline-none ring-0" value="R25-4-563 / Nasir Husain" />
+                    <div class="grid gap-3 sm:grid-cols-2">
+                      <div class="rounded-2xl border border-brand-200 bg-white px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Farmer</p>
+                        <p class="mt-1 font-semibold">NASIR HUSAIN</p>
+                        <p class="text-sm text-brand-600">Jetpura, Kishanganj, Baran</p>
+                      </div>
+                      <div class="rounded-2xl border border-brand-200 bg-white px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Crop / Class</p>
+                        <p class="mt-1 font-semibold">Wheat / Raj-4037</p>
+                        <p class="text-sm text-brand-600">Foundation I to Certified I</p>
+                      </div>
+                      <div class="rounded-2xl border border-brand-200 bg-white px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Expected</p>
+                        <p class="mt-1 font-semibold">222.95 QTL</p>
+                      </div>
+                      <div class="rounded-2xl border border-brand-200 bg-white px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.2em] text-brand-500">Received</p>
+                        <p class="mt-1 font-semibold">341.13 QTL</p>
+                      </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p class="text-sm font-semibold text-amber-800">Discrepancy flagged</p>
+                      <p class="mt-1 text-sm text-amber-700">Excess quantity detected. Payment voucher should apply certified and discrepancy rates separately.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-3xl border border-brand-200 bg-stone-50 p-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">Receipt Entry</p>
+                      <h3 class="mt-1 text-lg font-bold">Busy ERP Data Grid</h3>
+                    </div>
+                    <div class="rounded-xl bg-brand-800 px-3 py-2 text-sm font-semibold text-white">Receipt 116</div>
+                  </div>
+
+                  <div class="mt-4 grid gap-3 md:grid-cols-2">
+                    <label class="space-y-1">
+                      <span class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">Date</span>
+                      <input class="w-full rounded-2xl border border-brand-200 bg-white px-4 py-3 text-sm" value="2026-04-15" />
+                    </label>
+                    <label class="space-y-1">
+                      <span class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">Vehicle No.</span>
+                      <input class="w-full rounded-2xl border border-brand-200 bg-white px-4 py-3 text-sm" value="RJ08GA6044" />
+                    </label>
+                  </div>
+
+                  <div class="mt-4 overflow-hidden rounded-2xl border border-brand-200 bg-white">
+                    <div class="overflow-x-auto scroll-slim">
+                      <table class="min-w-full text-left text-sm">
+                        <thead class="bg-brand-900 text-brand-50">
+                          <tr class="text-xs uppercase tracking-[0.2em]">
+                            <th class="px-3 py-3">Godown</th>
+                            <th class="px-3 py-3">Stack</th>
+                            <th class="px-3 py-3">Gross</th>
+                            <th class="px-3 py-3">Bags</th>
+                            <th class="px-3 py-3">Moisture</th>
+                            <th class="px-3 py-3">Net</th>
+                            <th class="px-3 py-3">Wt/Bag</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr class="border-t border-brand-100">
+                            <td class="px-3 py-3">PIYUSH ASSOCIATES</td>
+                            <td class="px-3 py-3">03</td>
+                            <td class="px-3 py-3">109.75</td>
+                            <td class="px-3 py-3">200</td>
+                            <td class="px-3 py-3">11.5%</td>
+                            <td class="px-3 py-3 font-semibold">108.23</td>
+                            <td class="px-3 py-3">54.11 KG</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 flex flex-wrap gap-3">
+                    <button class="rounded-2xl bg-brand-700 px-5 py-3 text-sm font-semibold text-white">Save Intake Entry</button>
+                    <button class="rounded-2xl border border-brand-200 bg-white px-5 py-3 text-sm font-semibold text-brand-700">Update Existing</button>
+                    <button class="rounded-2xl border border-brand-200 bg-white px-5 py-3 text-sm font-semibold text-brand-700">Clear Draft</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <section class="rounded-3xl border border-brand-200 bg-white p-5 shadow-panel">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-brand-500">Task Queue</p>
+                    <h3 class="mt-1 text-lg font-bold">Operator Alerts</h3>
+                  </div>
+                  <span class="rounded-full bg-rose-100 px-3 py-2 text-xs font-bold text-rose-700">4 urgent</span>
+                </div>
+
+                <div class="mt-4 space-y-3 text-sm">
+                  <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p class="font-semibold text-amber-900">R25-13-1199 discrepancy review pending</p>
+                    <p class="mt-1 text-amber-700">Receipt 071 exceeded expected yield. Shift decision pending.</p>
+                  </div>
+                  <div class="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                    <p class="font-semibold text-sky-900">Daily intake report not exported</p>
+                    <p class="mt-1 text-sky-700">15-Apr-2026 report still pending for accountant review.</p>
+                  </div>
+                  <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <p class="font-semibold text-emerald-900">Voucher ready</p>
+                    <p class="mt-1 text-emerald-700">Dinesh Kumar Nagar voucher generated with dual rate split.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-3xl border border-brand-200 bg-white p-5 shadow-panel">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-brand-500">Live Desk Log</p>
+                    <h3 class="mt-1 text-lg font-bold">Recent Transactions</h3>
+                  </div>
+                  <button class="rounded-xl border border-brand-200 px-3 py-2 text-sm font-medium text-brand-700">Open full register</button>
+                </div>
+
+                <div class="mt-4 overflow-hidden rounded-2xl border border-brand-200">
+                  <table class="min-w-full text-left text-sm">
+                    <thead class="bg-brand-50 text-brand-700">
+                      <tr>
+                        <th class="px-4 py-3 font-semibold">Time</th>
+                        <th class="px-4 py-3 font-semibold">Action</th>
+                        <th class="px-4 py-3 font-semibold">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="border-t border-brand-100">
+                        <td class="px-4 py-3">12:03 PM</td>
+                        <td class="px-4 py-3">Receipt 115 updated for R25-4-429</td>
+                        <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Saved</span></td>
+                      </tr>
+                      <tr class="border-t border-brand-100">
+                        <td class="px-4 py-3">11:56 AM</td>
+                        <td class="px-4 py-3">Discrepancy shift opened for Stack 06</td>
+                        <td class="px-4 py-3"><span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">Pending</span></td>
+                      </tr>
+                      <tr class="border-t border-brand-100">
+                        <td class="px-4 py-3">11:44 AM</td>
+                        <td class="px-4 py-3">Daily intake register previewed</td>
+                        <td class="px-4 py-3"><span class="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700">Viewed</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="mt-5 rounded-3xl border border-brand-200 bg-white p-5 shadow-panel">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-brand-500">Dense ERP Table</p>
+                <h2 class="mt-1 text-xl font-bold">Registration Master Preview</h2>
+                <p class="mt-1 text-sm text-brand-600">This table is intentionally information-heavy, like the kind of screen operators and managers sit on all day.</p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <input class="w-64 rounded-2xl border border-brand-200 bg-stone-50 px-4 py-3 text-sm" value="Search reg. code / farmer / village" />
+                <button class="rounded-2xl bg-brand-700 px-5 py-3 text-sm font-semibold text-white">Download Excel</button>
+              </div>
+            </div>
+
+            <div class="mt-5 overflow-hidden rounded-2xl border border-brand-200">
+              <div class="overflow-x-auto scroll-slim">
+                <table class="min-w-full text-left text-sm">
+                  <thead class="bg-brand-900 text-brand-50">
+                    <tr class="text-xs uppercase tracking-[0.18em]">
+                      <th class="px-3 py-3">S.No.</th>
+                      <th class="px-3 py-3">Reg. Code</th>
+                      <th class="px-3 py-3">Farmer</th>
+                      <th class="px-3 py-3">Village</th>
+                      <th class="px-3 py-3">Distt</th>
+                      <th class="px-3 py-3">Seed Class</th>
+                      <th class="px-3 py-3">Expected</th>
+                      <th class="px-3 py-3">Received</th>
+                      <th class="px-3 py-3">Balance</th>
+                      <th class="px-3 py-3">Status</th>
+                      <th class="px-3 py-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white">
+                    <tr class="border-t border-brand-100 bg-brand-50/60">
+                      <td class="px-3 py-3">1</td>
+                      <td class="px-3 py-3 font-semibold">R25-4-563</td>
+                      <td class="px-3 py-3">NASIR HUSAIN</td>
+                      <td class="px-3 py-3">Jetpura</td>
+                      <td class="px-3 py-3">Baran</td>
+                      <td class="px-3 py-3">Foundation I</td>
+                      <td class="px-3 py-3">222.95</td>
+                      <td class="px-3 py-3">341.13</td>
+                      <td class="px-3 py-3">0.00</td>
+                      <td class="px-3 py-3"><span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">DISCREPANCY</span></td>
+                      <td class="px-3 py-3">
+                        <div class="flex gap-2">
+                          <button class="rounded-xl bg-brand-700 px-3 py-2 text-xs font-semibold text-white">Intake</button>
+                          <button class="rounded-xl border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700">Deposit View</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="border-t border-brand-100">
+                      <td class="px-3 py-3">2</td>
+                      <td class="px-3 py-3 font-semibold">R25-4-429</td>
+                      <td class="px-3 py-3">AMARCHAND</td>
+                      <td class="px-3 py-3">Atru</td>
+                      <td class="px-3 py-3">Baran</td>
+                      <td class="px-3 py-3">Certified I</td>
+                      <td class="px-3 py-3">42.20</td>
+                      <td class="px-3 py-3">41.78</td>
+                      <td class="px-3 py-3">0.42</td>
+                      <td class="px-3 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">ACTIVE</span></td>
+                      <td class="px-3 py-3">
+                        <div class="flex gap-2">
+                          <button class="rounded-xl bg-brand-700 px-3 py-2 text-xs font-semibold text-white">Intake</button>
+                          <button class="rounded-xl border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700">Deposit View</button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="border-t border-brand-100">
+                      <td class="px-3 py-3">3</td>
+                      <td class="px-3 py-3 font-semibold">R25-13-987</td>
+                      <td class="px-3 py-3">DINESH KUMAR NAGAR</td>
+                      <td class="px-3 py-3">Mangrol</td>
+                      <td class="px-3 py-3">Baran</td>
+                      <td class="px-3 py-3">Certified I</td>
+                      <td class="px-3 py-3">58.58</td>
+                      <td class="px-3 py-3">51.14</td>
+                      <td class="px-3 py-3">7.44</td>
+                      <td class="px-3 py-3"><span class="rounded-full bg-sky-100 px-2 py-1 text-xs font-bold text-sky-700">ACTIVE</span></td>
+                      <td class="px-3 py-3">
+                        <div class="flex gap-2">
+                          <button class="rounded-xl bg-brand-700 px-3 py-2 text-xs font-semibold text-white">Intake</button>
+                          <button class="rounded-xl border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700">Deposit View</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

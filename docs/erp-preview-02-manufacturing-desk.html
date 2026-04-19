@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ERP Preview 02 - Manufacturing Desk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-neutral-200 font-sans text-slate-800">
+    <div class="min-h-screen">
+      <header class="border-b border-slate-500 bg-slate-800 text-white">
+        <div class="flex items-center justify-between px-5 py-3">
+          <div>
+            <div class="text-xs uppercase tracking-[0.35em] text-slate-300">ERP Preview 02</div>
+            <div class="text-2xl font-bold">KRISHIV Operations Desk</div>
+          </div>
+          <div class="flex gap-3 text-sm">
+            <div class="border border-slate-500 bg-slate-700 px-4 py-2">Season: <strong>RABI 2025-26</strong></div>
+            <div class="border border-slate-500 bg-slate-700 px-4 py-2">Role: <strong>Manager</strong></div>
+          </div>
+        </div>
+      </header>
+      <div class="grid lg:grid-cols-[210px_minmax(0,1fr)]">
+        <aside class="border-r border-slate-400 bg-slate-100 p-3">
+          <div class="mb-3 border border-slate-400 bg-white px-3 py-2 text-sm font-semibold">Modules</div>
+          <div class="space-y-1 text-sm">
+            <div class="border border-slate-400 bg-slate-800 px-3 py-2 font-semibold text-white">Dashboard</div>
+            <div class="border border-slate-400 bg-white px-3 py-2">Intake Console</div>
+            <div class="border border-slate-400 bg-white px-3 py-2">Daily Register</div>
+            <div class="border border-slate-400 bg-white px-3 py-2">Lot Management</div>
+            <div class="border border-slate-400 bg-white px-3 py-2">Voucher Desk</div>
+            <div class="border border-slate-400 bg-white px-3 py-2">Reports</div>
+          </div>
+        </aside>
+        <main class="p-4">
+          <div class="mb-3 border border-slate-400 bg-white px-4 py-2 text-sm">Home / Operations / Intake Console</div>
+          <div class="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <section class="border border-slate-400 bg-white">
+              <div class="border-b border-slate-400 bg-slate-50 px-4 py-2 font-semibold">Live Intake Workbench</div>
+              <div class="grid gap-3 p-4 md:grid-cols-3">
+                <div class="border border-slate-300 bg-slate-50 p-3"><div class="text-xs uppercase text-slate-500">Open Receipts</div><div class="mt-2 text-2xl font-bold">23</div></div>
+                <div class="border border-slate-300 bg-slate-50 p-3"><div class="text-xs uppercase text-slate-500">Pending Shift</div><div class="mt-2 text-2xl font-bold">6</div></div>
+                <div class="border border-slate-300 bg-slate-50 p-3"><div class="text-xs uppercase text-slate-500">Voucher Pending</div><div class="mt-2 text-2xl font-bold">3</div></div>
+              </div>
+              <div class="border-t border-slate-300 p-4">
+                <div class="mb-3 grid gap-3 md:grid-cols-4">
+                  <input class="border border-slate-400 px-3 py-2 text-sm" value="R25-13-987" />
+                  <input class="border border-slate-400 px-3 py-2 text-sm" value="Dinesh Kumar Nagar" />
+                  <input class="border border-slate-400 px-3 py-2 text-sm" value="Receipt 099" />
+                  <button class="border border-slate-700 bg-slate-700 px-4 py-2 text-sm font-semibold text-white">Load</button>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full border-collapse text-sm">
+                    <thead class="bg-slate-700 text-white">
+                      <tr>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Godown</th>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Stack</th>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Gross</th>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Bags</th>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Net</th>
+                        <th class="border border-slate-400 px-3 py-2 text-left">Vehicle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="border border-slate-300 px-3 py-2">Piyush Associates</td>
+                        <td class="border border-slate-300 px-3 py-2">09</td>
+                        <td class="border border-slate-300 px-3 py-2">51.60</td>
+                        <td class="border border-slate-300 px-3 py-2">96</td>
+                        <td class="border border-slate-300 px-3 py-2">51.14</td>
+                        <td class="border border-slate-300 px-3 py-2">RJ28RA0461</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+            <section class="border border-slate-400 bg-white">
+              <div class="border-b border-slate-400 bg-slate-50 px-4 py-2 font-semibold">Workflow Exceptions</div>
+              <div class="space-y-2 p-4 text-sm">
+                <div class="border border-amber-300 bg-amber-50 px-3 py-3">R25-13-1199 receipt exceeds expected yield. Shift pending.</div>
+                <div class="border border-blue-300 bg-blue-50 px-3 py-3">Daily receipt line report ready for export.</div>
+                <div class="border border-emerald-300 bg-emerald-50 px-3 py-3">Voucher FVP-R25-13-987 created successfully.</div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

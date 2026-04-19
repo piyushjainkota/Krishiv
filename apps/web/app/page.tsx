@@ -10,6 +10,7 @@ import type {
   CertificationLot,
   DiscrepancyShift,
   FinancialVoucher,
+  FinancialVoucherPayment,
   Godown,
   IntakeDiscrepancy,
   IntakeReceipt,
@@ -40,6 +41,15 @@ type ViewKey =
   | "validations"
   | "backup"
   | "restore";
+
+type SidebarSectionKey =
+  | "overview"
+  | "masterData"
+  | "intakeOps"
+  | "stockLots"
+  | "financeOps"
+  | "reporting"
+  | "administration";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ??
   (typeof window !== "undefined"
@@ -56,22 +66,62 @@ type RegistrationSortKey =
   | "balanceQtl"
   | "status";
 
-const navItems: { key: ViewKey; label: string }[] = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "masters", label: "Masters" },
-  { key: "import", label: "Farmer Master Import" },
-  { key: "registrations", label: "Registration Master" },
-  { key: "intake", label: "Intake Entry" },
-  { key: "intakeEdit", label: "Intake Entry Edit" },
-  { key: "reports", label: "Reports" },
-  { key: "finance", label: "Financial Voucher" },
-  { key: "slips", label: "Slip Print Center" },
-  { key: "lots", label: "Lot Ledger" },
-  { key: "discrepancies", label: "Discrepancy Register" },
-  { key: "validations", label: "Validation Center" },
-  { key: "backup", label: "Database Backup" },
-  { key: "restore", label: "Database Restore" }
-];
+  const navSections: {
+    key: SidebarSectionKey;
+    label: string;
+    items: { key: ViewKey; label: string }[];
+  }[] = [
+    {
+      key: "overview",
+      label: "Overview",
+      items: [{ key: "dashboard", label: "Dashboard" }]
+    },
+    {
+      key: "masterData",
+      label: "Masters",
+      items: [
+        { key: "masters", label: "Godown & Stack Masters" },
+        { key: "import", label: "Farmer Master Import" },
+        { key: "registrations", label: "Registration Master" }
+      ]
+    },
+    {
+      key: "intakeOps",
+      label: "Intake",
+      items: [
+        { key: "intake", label: "Intake Entry" },
+        { key: "intakeEdit", label: "Intake Entry Edit" },
+        { key: "slips", label: "Slip Print Center" }
+      ]
+    },
+    {
+      key: "stockLots",
+      label: "Stock & Lots",
+      items: [
+        { key: "lots", label: "Lot Ledger" },
+        { key: "discrepancies", label: "Discrepancy Register" }
+      ]
+    },
+    {
+      key: "financeOps",
+      label: "Finance",
+      items: [{ key: "finance", label: "Financial Voucher" }]
+    },
+    {
+      key: "reporting",
+      label: "Reports",
+      items: [{ key: "reports", label: "Reports" }]
+    },
+    {
+      key: "administration",
+      label: "Administration",
+      items: [
+        { key: "validations", label: "Validation Center" },
+        { key: "backup", label: "Database Backup" },
+        { key: "restore", label: "Database Restore" }
+      ]
+    }
+  ];
 
 const rolePermissions: Record<AppRole, RolePermissions> = {
   ADMIN: {
@@ -108,12 +158,15 @@ const rolePermissions: Record<AppRole, RolePermissions> = {
 
 type ReportType =
   | "GODOWN_WISE_DETAIL"
+  | "DISTRICT_WISE_DETAIL"
   | "FARMER_WISE_DETAIL"
+  | "OVERALL_INTAKE"
   | "SUMMARY"
   | "DAILY_INTAKE_REGISTER"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
   | "STACK_WISE_STOCK_POSITION"
+  | "STACK_CARD_REGISTER"
   | "DISCREPANCY_REGISTER";
 
 type ReportMode = "ALL" | "ACCEPTED_ONLY" | "DISCREPANCY_ONLY";
@@ -151,12 +204,15 @@ type VoucherPreview = {
 
 const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "GODOWN_WISE_DETAIL", label: "Godown Wise Detail" },
+  { value: "DISTRICT_WISE_DETAIL", label: "District Wise Detail" },
   { value: "FARMER_WISE_DETAIL", label: "Farmer Wise Detail" },
+  { value: "OVERALL_INTAKE", label: "Overall Intake" },
   { value: "SUMMARY", label: "Summary" },
   { value: "DAILY_INTAKE_REGISTER", label: "Daily Intake Register" },
   { value: "REGISTRATION_PENDING_RECEIVED", label: "Registration Pending vs Received" },
   { value: "LOT_WISE_STOCK_LEDGER", label: "Lot-wise Stock Ledger" },
   { value: "STACK_WISE_STOCK_POSITION", label: "Stack-wise Stock Position" },
+  { value: "STACK_CARD_REGISTER", label: "Stack Card Register" },
   { value: "DISCREPANCY_REGISTER", label: "Discrepancy Register" }
 ];
 
@@ -215,6 +271,24 @@ function formatNumber(value: number): string {
 
 function roundQtl(value: number): number {
   return Number(value.toFixed(2));
+}
+
+function getVoucherFinalPayable(voucher: FinancialVoucher) {
+  return Number(voucher.finalPayableAmount ?? voucher.netPayableAmount ?? 0);
+}
+
+function getVoucherTotalPaid(voucher: FinancialVoucher) {
+  return Number(
+    voucher.totalPaidAmount ??
+      voucher.payments?.reduce((sum, item) => sum + Number(item.amount ?? 0), 0) ??
+      0
+  );
+}
+
+function getVoucherBalance(voucher: FinancialVoucher) {
+  return Number(
+    voucher.balanceAmount ?? Math.max(getVoucherFinalPayable(voucher) - getVoucherTotalPaid(voucher), 0)
+  );
 }
 
 function formatDateDisplay(value: string) {
@@ -331,7 +405,9 @@ function groupDiscrepancies(discrepancies: IntakeDiscrepancy[]) {
 }
 
 function sumReceiptNetQty(receipt: IntakeReceipt) {
-  return receipt.lines.reduce((sum, line) => sum + Number(line.qtyQtl ?? 0), 0);
+  return roundQtl(
+    receipt.lines.reduce((sum, line) => sum + Number(line.netWeightQtl ?? line.qtyQtl ?? 0), 0)
+  );
 }
 
 export default function HomePage() {
@@ -351,6 +427,15 @@ export default function HomePage() {
   } | null;
 
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  const [expandedNavSections, setExpandedNavSections] = useState<Record<SidebarSectionKey, boolean>>({
+    overview: true,
+    masterData: true,
+    intakeOps: true,
+    stockLots: true,
+    financeOps: true,
+    reporting: true,
+    administration: false
+  });
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [currentPermissions, setCurrentPermissions] = useState<RolePermissions | null>(null);
   const [loginEmail, setLoginEmail] = useState("");
@@ -388,6 +473,11 @@ export default function HomePage() {
   const [reportMode, setReportMode] = useState<ReportMode>("ALL");
   const [reportPreview, setReportPreview] = useState<ReportPreview | null>(null);
   const [slipSearch, setSlipSearch] = useState("");
+  const [slipDistrictFilter, setSlipDistrictFilter] = useState("");
+  const [slipVillageFilter, setSlipVillageFilter] = useState("");
+  const [slipClassFilter, setSlipClassFilter] = useState("");
+  const [slipCropFilter, setSlipCropFilter] = useState("");
+  const [slipOnlyWithIntake, setSlipOnlyWithIntake] = useState(true);
   const [slipType, setSlipType] = useState<SlipType>("FARMER_SINGLE_RECEIPT");
   const [slipRegistrationId, setSlipRegistrationId] = useState("");
   const [slipReceiptNo, setSlipReceiptNo] = useState("");
@@ -401,8 +491,14 @@ export default function HomePage() {
   const [certifiedRate, setCertifiedRate] = useState("");
   const [discrepancyRate, setDiscrepancyRate] = useState("");
   const [voucherDeduction, setVoucherDeduction] = useState("0");
+  const [voucherAdminPassword, setVoucherAdminPassword] = useState("");
   const [voucherRemarks, setVoucherRemarks] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
+  const [paymentLedgerVoucherId, setPaymentLedgerVoucherId] = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentTransactionNo, setPaymentTransactionNo] = useState("");
+  const [paymentRemarks, setPaymentRemarks] = useState("");
   const [importMessage, setImportMessage] = useState("Import the farmer master Excel to begin.");
   const [importAdminPassword, setImportAdminPassword] = useState("");
   const [backupDirectory, setBackupDirectory] = useState("D:\\KRISHIV seed DATA\\mongo-backups");
@@ -622,7 +718,24 @@ export default function HomePage() {
   const openDiscrepancies = discrepancies.filter((item) => item.status !== "RESOLVED");
   const dashboardMetrics = {
     expectedYield: registrations.reduce((sum, item) => sum + item.expectedYieldQtl, 0),
-    received: registrations.reduce((sum, item) => sum + item.totalReceivedQtl, 0),
+    grossReceived: receipts.reduce(
+      (sum, receipt) =>
+        sum +
+        receipt.lines.reduce(
+          (lineSum, line) => lineSum + Number(line.grossWeightQtl ?? 0),
+          0
+        ),
+      0
+    ),
+    netReceived: receipts.reduce(
+      (sum, receipt) =>
+        sum +
+        receipt.lines.reduce(
+          (lineSum, line) => lineSum + Number(line.netWeightQtl ?? line.qtyQtl ?? 0),
+          0
+        ),
+      0
+    ),
     pending: registrations.reduce((sum, item) => sum + item.balanceQtl, 0),
     activeRegistrations: registrations.filter((item) => item.status === "ACTIVE").length,
     openLots: lots.filter((item) => item.status === "OPEN").length,
@@ -640,12 +753,34 @@ export default function HomePage() {
     shiftedBags: discrepancyShifts.reduce((sum, item) => sum + item.shiftedBags, 0),
     shiftedCases: discrepancyShifts.length
   };
-  const visibleNavItems = navItems.filter(
-    (item) => item.key !== "discrepancies" || features.discrepancyWorkflow
-  );
+  const visibleNavSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => item.key !== "discrepancies" || features.discrepancyWorkflow
+      )
+    }))
+    .filter((section) => section.items.length > 0);
+  const visibleNavItems = visibleNavSections.flatMap((section) => section.items);
   const isNavItemDisabled = (key: ViewKey) =>
     ((key === "backup" || key === "restore" || key === "masters") && !isAdminUser) ||
     ((key === "import") && !effectivePermissions?.canImport);
+  const activeNavSectionKey =
+    visibleNavSections.find((section) => section.items.some((item) => item.key === activeView))?.key ?? "overview";
+  const activeNavItem = visibleNavItems.find((item) => item.key === activeView) ?? null;
+  function toggleNavSection(sectionKey: SidebarSectionKey) {
+    setExpandedNavSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey]
+    }));
+  }
+  function openViewFromNav(view: ViewKey, sectionKey: SidebarSectionKey) {
+    setExpandedNavSections((current) => ({
+      ...current,
+      [sectionKey]: true
+    }));
+    setActiveView(view);
+  }
   const openDiscrepancyKeySet = new Set(
     openDiscrepancies.map((item) => `${item.cropRegistrationCode}::${item.stackNo}`)
   );
@@ -693,6 +828,18 @@ export default function HomePage() {
   const slipLots = slipRegistration
     ? lotLedgerRows.filter((item) => item.cropRegistrationId === slipRegistration.id)
     : [];
+  const slipDistrictOptions = Array.from(
+    new Set(registrations.map((item) => item.district).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const slipVillageOptions = Array.from(
+    new Set(registrations.map((item) => item.village).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const slipClassOptions = Array.from(
+    new Set(registrations.map((item) => item.classStage).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const slipCropOptions = Array.from(
+    new Set(registrations.map((item) => item.crop).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
   const slipRegistrationRows = registrations
     .filter((item) => item.status !== "BLOCKED")
     .filter((item) => {
@@ -709,6 +856,11 @@ export default function HomePage() {
         item.classStage.toLowerCase().includes(query)
       );
     })
+    .filter((item) => !slipDistrictFilter || item.district === slipDistrictFilter)
+    .filter((item) => !slipVillageFilter || item.village === slipVillageFilter)
+    .filter((item) => !slipClassFilter || item.classStage === slipClassFilter)
+    .filter((item) => !slipCropFilter || item.crop === slipCropFilter)
+    .filter((item) => !slipOnlyWithIntake || item.totalReceivedQtl > 0)
     .slice()
     .sort((left, right) =>
       left.farmerName.localeCompare(right.farmerName, "en", { sensitivity: "base" })
@@ -725,6 +877,8 @@ export default function HomePage() {
   const voucherByRegistrationId = new Map(
     financialVouchers.map((item) => [item.cropRegistrationId, item] as const)
   );
+  const paymentLedgerVoucher =
+    financialVouchers.find((item) => item.id === paymentLedgerVoucherId) ?? null;
   const activeVoucher =
     (voucherRegistrationId ? voucherByRegistrationId.get(voucherRegistrationId) : null) ??
     voucherPreview?.voucher ??
@@ -754,6 +908,17 @@ export default function HomePage() {
       qtyQtl: roundQtl(current.qtyQtl + Number(item.excessQtyQtl ?? 0)),
       bags: current.bags + Number(item.estimatedExcessBags ?? 0)
     });
+  });
+  const registrationBagMap = new Map<string, number>();
+  receipts.forEach((receipt) => {
+    const totalBags = receipt.lines.reduce(
+      (sum, line) => sum + Number(line.noOfBags ?? 0),
+      0
+    );
+    registrationBagMap.set(
+      receipt.cropRegistrationId,
+      (registrationBagMap.get(receipt.cropRegistrationId) ?? 0) + totalBags
+    );
   });
   const registrationReceiptLines = registrationReceipts.flatMap((receipt) =>
     receipt.lines.map((line) => ({
@@ -831,6 +996,8 @@ export default function HomePage() {
   const shortSnapshot = [
     `${receipts.length} receipts`,
     `${dashboardMetrics.intakeBags} bags`,
+    `${formatNumber(dashboardMetrics.grossReceived)} gross QTL`,
+    `${formatNumber(dashboardMetrics.netReceived)} net QTL`,
     `${dashboardMetrics.totalLots} lots`,
     `${dashboardMetrics.discrepancyCount} open discrepancies`
   ].join(" | ");
@@ -1180,6 +1347,16 @@ export default function HomePage() {
     );
     setActiveView("intake");
     setToast(`Editing receipt ${receipt.receiptNo}.`);
+  }
+
+  function startEditReceiptFromDeposit(receiptNoToEdit: string) {
+    const receipt = receipts.find((item) => item.receiptNo === receiptNoToEdit);
+    if (!receipt) {
+      notifyUser("Receipt not found.");
+      return;
+    }
+    setDepositViewRegistrationId("");
+    startEditReceipt(receipt);
   }
 
   function deleteReceipt(receiptRefToDelete: string, receiptNoToDelete: string) {
@@ -1723,7 +1900,9 @@ export default function HomePage() {
     const nextSlipShifts = discrepancyShifts.filter(
       (item) => item.cropRegistrationCode === nextRegistration.cropRegistrationCode
     );
-    const nextSlipLots = lotLedgerRows.filter((item) => item.cropRegistrationId === nextRegistration.id);
+    const nextSlipLots = lotLedgerRows.filter(
+      (item) => item.cropRegistrationId === nextRegistration.id && item.status !== "VOID"
+    );
     const totalNetQtl = nextSlipReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
     const totalGrossQtl = nextSlipReceipts.reduce(
       (sum, receipt) =>
@@ -1756,8 +1935,8 @@ export default function HomePage() {
         Vehicle: line.vehicleNo || "-",
         Stack: line.stackNo,
         Bags: Number(line.noOfBags ?? 0),
-        Gross: Number(line.grossWeightQtl ?? 0),
-        Net: Number(line.netWeightQtl ?? line.qtyQtl ?? 0)
+        Gross: roundQtl(Number(line.grossWeightQtl ?? 0)),
+        Net: roundQtl(Number(line.netWeightQtl ?? line.qtyQtl ?? 0))
       }));
 
       return {
@@ -1830,17 +2009,17 @@ export default function HomePage() {
         Vehicle:
           Array.from(
             new Set(receipt.lines.map((line) => line.vehicleNo?.trim()).filter(Boolean))
-          ).join(", ") || "-",
+        ).join(", ") || "-",
         Bags: receipt.lines.reduce((sum, line) => sum + Number(line.noOfBags ?? 0), 0),
         Gross: roundQtl(
           receipt.lines.reduce((sum, line) => sum + Number(line.grossWeightQtl ?? 0), 0)
         ),
-        Net: sumReceiptNetQty(receipt)
+        Net: roundQtl(sumReceiptNetQty(receipt))
       }));
       const lotSummaryLines = nextSlipLots.length
         ? nextSlipLots.map((lot) => ({
             label: `L${lot.lotNo}`,
-            value: `Stack ${lot.stackNo}   ${lot.bags} Bags   ${formatNumber(lot.displayQtyQtl)} QTL`
+            value: `Stack ${lot.stackNo}   ${lot.bags} Bags   ${formatNumber(roundQtl(lot.displayQtyQtl))} QTL`
           }))
         : [{ label: "L-", value: "No lots created" }];
       const discrepancyLines = [
@@ -1936,17 +2115,17 @@ export default function HomePage() {
         sum + receipt.lines.reduce((lineSum, line) => lineSum + Number(line.noOfBags ?? 0), 0),
       0
     );
-    const tableRows = nextSlipDailyReceipts.flatMap((receipt) =>
-      receipt.lines.map((line, index) => ({
-        No: `${receipt.receiptNo}-${index + 1}`,
-        "Receipt No.": receipt.receiptNo,
-        Vehicle: line.vehicleNo || "-",
-        Stack: line.stackNo,
-        Bags: Number(line.noOfBags ?? 0),
-        Gross: Number(line.grossWeightQtl ?? 0),
-        Net: Number(line.netWeightQtl ?? line.qtyQtl ?? 0)
-      }))
-    );
+      const tableRows = nextSlipDailyReceipts.flatMap((receipt) =>
+        receipt.lines.map((line, index) => ({
+          No: `${receipt.receiptNo}-${index + 1}`,
+          "Receipt No.": receipt.receiptNo,
+          Vehicle: line.vehicleNo || "-",
+          Stack: line.stackNo,
+          Bags: Number(line.noOfBags ?? 0),
+          Gross: roundQtl(Number(line.grossWeightQtl ?? 0)),
+          Net: roundQtl(Number(line.netWeightQtl ?? line.qtyQtl ?? 0))
+        }))
+      );
     const remarks = Array.from(
       new Set(
         nextSlipDailyReceipts.flatMap((receipt) =>
@@ -1996,6 +2175,197 @@ export default function HomePage() {
       ],
       footerNote: remarks || "Daily consolidated intake issued."
     };
+  }
+
+  function renderSlipPreviewPdf(doc: jsPDF, preview: SlipPreview, addNewPage = false) {
+    if (addNewPage) {
+      doc.addPage();
+    }
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const left = 10;
+    const right = pageWidth - 10;
+    let y = 10;
+    const titleText =
+      preview.template === "DAILY_CONSOLIDATED_CLASSIC"
+        ? "DAILY CONSOLIDATED INTAKE SLIP"
+        : preview.template === "FARMER_OVERALL_CLASSIC"
+          ? "FARMER OVERALL CONSOLIDATED INTAKE SLIP"
+          : "FARMER INTAKE RECEIPT";
+    const totalMap = new Map(preview.totals.map((item) => [item.label, item.value]));
+    const metaEntries = preview.summary.slice(0, 4);
+    const detailEntries = preview.summary.slice(4);
+
+    doc.setDrawColor(91, 61, 38);
+    doc.setLineWidth(0.3);
+    doc.line(left, y, right, y);
+    y += 4;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(preview.pageSize === "A5" ? 12 : 14);
+    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
+    y += 5;
+    doc.text(titleText, pageWidth / 2, y, { align: "center" });
+    y += 4;
+    doc.line(left, y, right, y);
+    y += 5;
+
+    doc.setFontSize(preview.pageSize === "A5" ? 9 : 10);
+    metaEntries.forEach((item, index) => {
+      const label = index === 0 ? "Slip No." : item.label;
+      const value = index === 0 ? preview.slipNo ?? item.value : item.value;
+      doc.setFont("helvetica", "bold");
+      doc.text(`${label}`, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, left + 26, y);
+      y += 4.5;
+    });
+
+    y += 1;
+    const detailColGap = 8;
+    const detailColWidth = (right - left - detailColGap) / 2;
+    detailEntries.forEach((item, index) => {
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const rowY = y + row * 4.5;
+      const x = left + col * (detailColWidth + detailColGap);
+      doc.setFont("helvetica", "bold");
+      doc.text(item.label, x, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${item.value}`, x + 23, rowY, { maxWidth: detailColWidth - 23 });
+    });
+    y += Math.ceil(detailEntries.length / 2) * 4.5 + 2;
+
+    doc.line(left, y, right, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.text("Receipt Detail", left, y);
+    y += 3;
+    doc.line(left, y, right, y);
+    y += 1;
+
+    const body = preview.tableRows.map((row) =>
+      preview.tableColumns.map((column) => String(row[column] ?? ""))
+    );
+    body.push([
+      "Total",
+      ...preview.tableColumns.slice(1, Math.max(preview.tableColumns.length - 3, 1)).map(() => ""),
+      totalMap.get("Total Bags") ?? "",
+      totalMap.get("Total Gross") ?? "",
+      totalMap.get("Total Net") ?? ""
+    ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [preview.tableColumns],
+      body,
+      theme: "grid",
+      styles: {
+        fontSize: preview.pageSize === "A5" ? 7.5 : 8,
+        cellPadding: 1.5,
+        textColor: [47, 30, 18],
+        lineColor: [216, 200, 183]
+      },
+      headStyles: {
+        fillColor: [243, 237, 229],
+        textColor: [47, 30, 18],
+        fontStyle: "bold"
+      },
+      bodyStyles: {
+        valign: "middle"
+      },
+      margin: { left, right: pageWidth - right },
+      didParseCell: (data) => {
+        if (data.row.index === body.length - 1) {
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+    });
+
+    y = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+      ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 5
+      : y + 30;
+
+    if (y > pageHeight - 35) {
+      doc.addPage();
+      y = 12;
+    }
+
+    const bottomLines = [
+      totalMap.get("Prev. Received")
+        ? { label: "Prev. Received", value: totalMap.get("Prev. Received") ?? "" }
+        : null,
+      totalMap.get("Today Received")
+        ? { label: "Today Received", value: totalMap.get("Today Received") ?? "" }
+        : null,
+      totalMap.get("Total Net")
+        ? { label: "Net Received", value: totalMap.get("Total Net") ?? "" }
+        : null,
+      totalMap.get("Balance")
+        ? { label: "Balance", value: totalMap.get("Balance") ?? "" }
+        : null
+    ].filter((item): item is { label: string; value: string } => Boolean(item));
+
+    bottomLines.forEach((line) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(line.label, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${line.value}`, left + 26, y);
+      y += 4.5;
+    });
+    y += 1.5;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Remarks:", left, y);
+    y += 4;
+    doc.setFont("helvetica", "normal");
+    const extraSections = preview.extraSections ?? [];
+    if (extraSections.length > 0) {
+      extraSections.forEach((section) => {
+        if (y > pageHeight - 28) {
+          doc.addPage();
+          y = 12;
+        }
+        doc.setFont("helvetica", "bold");
+        doc.text(section.title, left, y);
+        y += 4;
+        section.lines.forEach((line) => {
+          doc.setFont("helvetica", "bold");
+          doc.text(line.label, left, y);
+          doc.setFont("helvetica", "normal");
+          const valueLines = doc.splitTextToSize(`: ${line.value}`, right - left - 24);
+          doc.text(valueLines, left + 24, y);
+          y += valueLines.length * 4;
+        });
+        y += 3;
+      });
+    }
+
+    if (preview.footerNote.trim()) {
+      if (y > pageHeight - 24) {
+        doc.addPage();
+        y = 12;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text("Remarks:", left, y);
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      const remarksLines = doc.splitTextToSize(preview.footerNote, right - left);
+      doc.text(remarksLines, left, y);
+      y += remarksLines.length * 4 + 4;
+    }
+
+    if (y > pageHeight - 18) {
+      doc.addPage();
+      y = 12;
+    }
+
+    const signatureWidth = (right - left) / 3;
+    doc.setFont("helvetica", "normal");
+    doc.text("Operator Sign : ______________", left, y);
+    doc.text("Farmer Sign : ______________", left + signatureWidth, y);
+    doc.text("Godown Incharge : ______________", left + signatureWidth * 2, y);
   }
 
   function previewSlip(overrides?: Partial<{
@@ -2052,6 +2422,11 @@ export default function HomePage() {
 
   function resetSlipFilters() {
     setSlipSearch("");
+    setSlipDistrictFilter("");
+    setSlipVillageFilter("");
+    setSlipClassFilter("");
+    setSlipCropFilter("");
+    setSlipOnlyWithIntake(true);
     setSlipType("FARMER_SINGLE_RECEIPT");
     setSlipRegistrationId(registrations[0]?.id ?? "");
     setSlipReceiptNo("");
@@ -2060,16 +2435,38 @@ export default function HomePage() {
     setSlipModalOpen(false);
   }
 
-  function openVoucherModal(registrationId: string) {
+  function promptAdminPassword(voucherNo: string, actionLabel: string) {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const value = window.prompt(
+      `${actionLabel} for paid voucher ${voucherNo} requires admin password.`
+    );
+    if (value === null) {
+      return null;
+    }
+    return value.trim();
+  }
+
+  function openVoucherModal(registrationId: string, adminPassword = "") {
     if (!requirePermission("canVoucher", "Your role cannot generate or edit financial vouchers.")) {
       return;
     }
     const existingVoucher = voucherByRegistrationId.get(registrationId) ?? null;
+    let overridePassword = adminPassword;
+    if (existingVoucher?.status === "PAID" && !overridePassword) {
+      const prompted = promptAdminPassword(existingVoucher.voucherNo, "Editing");
+      if (prompted === null) {
+        return;
+      }
+      overridePassword = prompted;
+    }
     setVoucherRegistrationId(registrationId);
     setVoucherDate(existingVoucher?.voucherDate ?? new Date().toISOString().slice(0, 10));
     setCertifiedRate(existingVoucher ? String(existingVoucher.certifiedRatePerQtl) : "");
     setDiscrepancyRate(existingVoucher ? String(existingVoucher.discrepancyRatePerQtl) : "");
     setVoucherDeduction(existingVoucher ? String(existingVoucher.deductionAmount) : "0");
+    setVoucherAdminPassword(overridePassword);
     setVoucherRemarks(existingVoucher?.remarks ?? "");
     setVoucherPreview(
       existingVoucher
@@ -2085,6 +2482,26 @@ export default function HomePage() {
   function closeVoucherModal() {
     setVoucherModalOpen(false);
     setVoucherPreview(null);
+    setVoucherAdminPassword("");
+  }
+
+  function openPaymentLedger(voucher: FinancialVoucher) {
+    if (!requirePermission("canVoucher", "Your role cannot manage voucher payments.")) {
+      return;
+    }
+    setPaymentLedgerVoucherId(voucher.id);
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentAmount("");
+    setPaymentTransactionNo("");
+    setPaymentRemarks("");
+  }
+
+  function closePaymentLedger() {
+    setPaymentLedgerVoucherId("");
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentAmount("");
+    setPaymentTransactionNo("");
+    setPaymentRemarks("");
   }
 
   async function generateVoucher() {
@@ -2120,6 +2537,7 @@ export default function HomePage() {
         certifiedRatePerQtl: certifiedRateValue,
         discrepancyRatePerQtl: discrepancyRateValue,
         deductionAmount,
+        adminPassword: voucherAdminPassword,
         remarks: voucherRemarks
       })
     });
@@ -2170,6 +2588,202 @@ export default function HomePage() {
         ? `Voucher ${createdVoucher.voucherNo} updated.`
         : `Voucher ${createdVoucher.voucherNo} generated.`
     );
+  }
+
+  async function markVoucherPaid(voucher: FinancialVoucher) {
+    if (!requirePermission("canVoucher", "Your role cannot update financial vouchers.")) {
+      return;
+    }
+
+    const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${voucher.id}/paid`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({})
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      throw new Error(errorBody?.message || "Unable to mark voucher as paid.");
+    }
+
+    const data = (await response.json()) as {
+      registrations: RegistrationRecord[];
+      godowns: Godown[];
+      stacks: Stack[];
+      lots: CertificationLot[];
+      discrepancies: IntakeDiscrepancy[];
+      discrepancyShifts: DiscrepancyShift[];
+      financialVouchers: FinancialVoucher[];
+      receipts: IntakeReceipt[];
+      features?: { discrepancyWorkflow?: boolean };
+    };
+
+    setRegistrations(data.registrations ?? []);
+    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+    setLots(data.lots ?? []);
+    setDiscrepancies(data.discrepancies ?? []);
+    setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setFinancialVouchers(data.financialVouchers ?? []);
+    setReceipts(data.receipts ?? []);
+    setFeatures({
+      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+    });
+
+    if (voucherPreview?.voucher.id === voucher.id) {
+      const refreshed =
+        (data.financialVouchers ?? []).find((item) => item.id === voucher.id) ?? null;
+      setVoucherPreview(
+        refreshed
+          ? {
+              voucher: refreshed,
+              hasDiscrepancy: Number(refreshed.discrepancyQtyQtl ?? 0) > 0
+            }
+          : null
+      );
+    }
+
+    notifyUser(`Voucher ${voucher.voucherNo} marked as paid.`);
+  }
+
+  async function deleteVoucher(voucher: FinancialVoucher, adminPassword = "") {
+    if (!requirePermission("canVoucher", "Your role cannot delete financial vouchers.")) {
+      return;
+    }
+
+    let overridePassword = adminPassword;
+    if (voucher.status === "PAID" && !overridePassword) {
+      const prompted = promptAdminPassword(voucher.voucherNo, "Deleting");
+      if (prompted === null) {
+        return;
+      }
+      overridePassword = prompted;
+    }
+
+    const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${voucher.id}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        adminPassword: overridePassword
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      throw new Error(errorBody?.message || "Unable to delete financial voucher.");
+    }
+
+    const data = (await response.json()) as {
+      registrations: RegistrationRecord[];
+      godowns: Godown[];
+      stacks: Stack[];
+      lots: CertificationLot[];
+      discrepancies: IntakeDiscrepancy[];
+      discrepancyShifts: DiscrepancyShift[];
+      financialVouchers: FinancialVoucher[];
+      receipts: IntakeReceipt[];
+      features?: { discrepancyWorkflow?: boolean };
+    };
+
+    setRegistrations(data.registrations ?? []);
+    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+    setLots(data.lots ?? []);
+    setDiscrepancies(data.discrepancies ?? []);
+    setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setFinancialVouchers(data.financialVouchers ?? []);
+    setReceipts(data.receipts ?? []);
+    setFeatures({
+      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+    });
+
+    if (voucherPreview?.voucher.id === voucher.id) {
+      closeVoucherModal();
+    }
+
+    notifyUser(`Voucher ${voucher.voucherNo} deleted.`);
+  }
+
+  async function addVoucherPayment() {
+    if (!requirePermission("canVoucher", "Your role cannot manage voucher payments.")) {
+      return;
+    }
+    if (!paymentLedgerVoucher) {
+      notifyUser("Select a voucher first.");
+      return;
+    }
+    const amount = Number(paymentAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notifyUser("Enter payment amount.");
+      return;
+    }
+    if (!paymentTransactionNo.trim()) {
+      notifyUser("Enter transaction number.");
+      return;
+    }
+
+    const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        paymentDate,
+        amount,
+        transactionNo: paymentTransactionNo.trim(),
+        remarks: paymentRemarks
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      throw new Error(errorBody?.message || "Unable to add voucher payment.");
+    }
+
+    const data = (await response.json()) as {
+      registrations: RegistrationRecord[];
+      godowns: Godown[];
+      stacks: Stack[];
+      lots: CertificationLot[];
+      discrepancies: IntakeDiscrepancy[];
+      discrepancyShifts: DiscrepancyShift[];
+      financialVouchers: FinancialVoucher[];
+      receipts: IntakeReceipt[];
+      features?: { discrepancyWorkflow?: boolean };
+    };
+
+    setRegistrations(data.registrations ?? []);
+    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+    setLots(data.lots ?? []);
+    setDiscrepancies(data.discrepancies ?? []);
+    setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setFinancialVouchers(data.financialVouchers ?? []);
+    setReceipts(data.receipts ?? []);
+    setFeatures({
+      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+    });
+    if (voucherPreview?.voucher.id === paymentLedgerVoucher.id) {
+      const refreshed =
+        (data.financialVouchers ?? []).find((item) => item.id === paymentLedgerVoucher.id) ?? null;
+      setVoucherPreview(
+        refreshed
+          ? {
+              voucher: refreshed,
+              hasDiscrepancy: Number(refreshed.discrepancyQtyQtl ?? 0) > 0
+            }
+          : null
+      );
+    }
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentAmount("");
+    setPaymentTransactionNo("");
+    setPaymentRemarks("");
+    notifyUser(`Payment recorded for voucher ${paymentLedgerVoucher.voucherNo}.`);
   }
 
   function downloadVoucherPdf(voucher: FinancialVoucher) {
@@ -2334,8 +2948,10 @@ export default function HomePage() {
     }
     paymentBody.push(
       ["Gross Payable Amount", "", "", formatNumber(voucher.grossPayableAmount)],
-      ["Less Deductions", "", "", formatNumber(voucher.deductionAmount)],
-      ["Net Payable Amount", "", "", formatNumber(voucher.netPayableAmount)]
+      ["Seed Payment", "", "", formatNumber(voucher.deductionAmount)],
+      ["Net Payable Amount", "", "", formatNumber(voucher.netPayableAmount)],
+      ["Rounded Off", "", "", formatNumber(Number(voucher.roundedOffAmount ?? 0))],
+      ["Final Payable Amount", "", "", formatNumber(getVoucherFinalPayable(voucher))]
     );
 
     autoTable(doc, {
@@ -2385,6 +3001,179 @@ export default function HomePage() {
     notifyUser(`Voucher ${voucher.voucherNo} downloaded.`);
   }
 
+  function downloadPaymentLedgerPdf(voucher: FinancialVoucher) {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const left = 10;
+    const right = pageWidth - 10;
+    let y = 10;
+    const finalPayableAmount = getVoucherFinalPayable(voucher);
+    const seedPurchaseAmount = Number(voucher.grossPayableAmount ?? 0);
+    const seedPaymentAmount = Number(voucher.deductionAmount ?? 0);
+
+    const ledgerRows: Array<[string, string, string, string, string, string]> = [];
+    let runningBalance = finalPayableAmount;
+    ledgerRows.push([
+      formatDateDisplay(voucher.voucherDate),
+      "Seed Purchase Voucher Raised",
+      "-",
+      formatNumber(finalPayableAmount),
+      "-",
+      formatNumber(runningBalance)
+    ]);
+
+    (voucher.payments ?? []).forEach((payment, index) => {
+      runningBalance = Math.max(
+        0,
+        Number((runningBalance - Number(payment.amount ?? 0)).toFixed(2))
+      );
+      ledgerRows.push([
+        formatDateDisplay(payment.paymentDate),
+        `${index === 0 ? "Payment" : "Other Payment"} by RTGS/NEFT`,
+        payment.transactionNo || "-",
+        "-",
+        formatNumber(Number(payment.amount ?? 0)),
+        formatNumber(runningBalance)
+      ]);
+    });
+
+    const totalCredit = roundQtl(
+      (voucher.payments ?? []).reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
+    );
+    const closingBalance = roundQtl(finalPayableAmount - totalCredit);
+
+    doc.setDrawColor(91, 61, 38);
+    doc.setLineWidth(0.3);
+    doc.line(left, y, right, y);
+    y += 4;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
+    y += 5;
+    doc.text("FARMER PAYMENT LEDGER", pageWidth / 2, y, { align: "center" });
+    y += 4;
+    doc.line(left, y, right, y);
+    y += 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("Voucher No.", left, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(`: ${voucher.voucherNo}`, left + 31, y);
+    y += 6;
+
+    const farmerSummary = [
+      ["Farmer Name", voucher.farmerName],
+      ["F/H Name", voucher.fatherName || "-"],
+      ["Village", voucher.village || "-"],
+      ["District", voucher.district || "-"]
+    ];
+
+    farmerSummary.forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(label, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, left + 31, y);
+      y += 4.6;
+    });
+
+    y += 1;
+    doc.line(left, y, right, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.text("Voucher Summary", left, y);
+    y += 4;
+    doc.line(left, y, right, y);
+    y += 5;
+
+    [
+      ["Seed Purchase Amount", formatNumber(seedPurchaseAmount)],
+      ["Seed Payment", formatNumber(seedPaymentAmount)],
+      ["Final Payable Amount", formatNumber(finalPayableAmount)]
+    ].forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(label, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, left + 40, y);
+      y += 4.6;
+    });
+
+    y += 1;
+    doc.line(left, y, right, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.text("Ledger Detail", left, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Date", "Particulars", "Transaction No.", "Debit", "Credit", "Balance"]],
+      body: ledgerRows,
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 6.7,
+        cellPadding: 1.2,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "left"
+      },
+      columnStyles: {
+        0: { cellWidth: 18 },
+        1: { cellWidth: 36 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 18, halign: "right" },
+        4: { cellWidth: 18, halign: "right" },
+        5: { cellWidth: 18, halign: "right" }
+      }
+    });
+
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 5;
+    doc.line(left, y, right, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.text("Ledger Totals", left, y);
+    y += 4;
+    doc.line(left, y, right, y);
+    y += 5;
+
+    [
+      ["Total Debit", formatNumber(finalPayableAmount)],
+      ["Total Credit", formatNumber(totalCredit)],
+      ["Closing Balance", formatNumber(closingBalance)]
+    ].forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(label, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, left + 31, y);
+      y += 4.6;
+    });
+
+    y += 2;
+    doc.line(left, y, right, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.text("Prepared By          : __________________", left, y);
+    y += 5;
+    doc.text("Checked By           : __________________", left, y);
+    y += 5;
+    doc.text("Approved By          : __________________", left, y);
+    y += 4;
+    doc.line(left, y, right, y);
+    doc.save(`${voucher.voucherNo.replace(/[^A-Za-z0-9_-]+/g, "_")}_ledger.pdf`);
+    notifyUser(`Payment ledger for ${voucher.voucherNo} downloaded.`);
+  }
+
   function printSlipPdf() {
     if (!slipPreview) {
       notifyUser("Load a slip preview first.");
@@ -2397,196 +3186,59 @@ export default function HomePage() {
         unit: "mm",
         format: slipPreview.pageSize.toLowerCase() as "a4" | "a5"
       });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const left = 10;
-      const right = pageWidth - 10;
-      let y = 10;
-      const titleText =
-        slipPreview.template === "DAILY_CONSOLIDATED_CLASSIC"
-          ? "DAILY CONSOLIDATED INTAKE SLIP"
-          : slipPreview.template === "FARMER_OVERALL_CLASSIC"
-            ? "FARMER OVERALL CONSOLIDATED INTAKE SLIP"
-            : "FARMER INTAKE RECEIPT";
-      const totalMap = new Map(slipPreview.totals.map((item) => [item.label, item.value]));
-      const metaEntries = slipPreview.summary.slice(0, 4);
-      const detailEntries = slipPreview.summary.slice(4);
       const fileName = `${(slipPreview.slipNo ?? slipPreview.title).replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`;
-
-      doc.setDrawColor(91, 61, 38);
-      doc.setLineWidth(0.3);
-      doc.line(left, y, right, y);
-      y += 4;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(slipPreview.pageSize === "A5" ? 12 : 14);
-      doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
-      y += 5;
-      doc.text(titleText, pageWidth / 2, y, { align: "center" });
-      y += 4;
-      doc.line(left, y, right, y);
-      y += 5;
-
-      doc.setFontSize(slipPreview.pageSize === "A5" ? 9 : 10);
-      metaEntries.forEach((item, index) => {
-        const label = index === 0 ? "Slip No." : item.label;
-        const value = index === 0 ? slipPreview.slipNo ?? item.value : item.value;
-        doc.setFont("helvetica", "bold");
-        doc.text(`${label}`, left, y);
-        doc.setFont("helvetica", "normal");
-        doc.text(`: ${value}`, left + 26, y);
-        y += 4.5;
-      });
-
-      y += 1;
-      const detailColGap = 8;
-      const detailColWidth = (right - left - detailColGap) / 2;
-      detailEntries.forEach((item, index) => {
-        const col = index % 2;
-        const row = Math.floor(index / 2);
-        const rowY = y + row * 4.5;
-        const x = left + col * (detailColWidth + detailColGap);
-        doc.setFont("helvetica", "bold");
-        doc.text(item.label, x, rowY);
-        doc.setFont("helvetica", "normal");
-        doc.text(`: ${item.value}`, x + 23, rowY, { maxWidth: detailColWidth - 23 });
-      });
-      y += Math.ceil(detailEntries.length / 2) * 4.5 + 2;
-
-      doc.line(left, y, right, y);
-      y += 4;
-      doc.setFont("helvetica", "bold");
-      doc.text("Receipt Detail", left, y);
-      y += 3;
-      doc.line(left, y, right, y);
-      y += 1;
-
-      const body = slipPreview.tableRows.map((row) =>
-        slipPreview.tableColumns.map((column) => String(row[column] ?? ""))
-      );
-      body.push([
-        "Total",
-        ...slipPreview.tableColumns.slice(1, Math.max(slipPreview.tableColumns.length - 3, 1)).map(() => ""),
-        totalMap.get("Total Bags") ?? "",
-        totalMap.get("Total Gross") ?? "",
-        totalMap.get("Total Net") ?? ""
-      ]);
-
-      autoTable(doc, {
-        startY: y,
-        head: [slipPreview.tableColumns],
-        body,
-        theme: "grid",
-        styles: {
-          fontSize: slipPreview.pageSize === "A5" ? 7.5 : 8,
-          cellPadding: 1.5,
-          textColor: [47, 30, 18],
-          lineColor: [216, 200, 183]
-        },
-        headStyles: {
-          fillColor: [243, 237, 229],
-          textColor: [47, 30, 18],
-          fontStyle: "bold"
-        },
-        bodyStyles: {
-          valign: "middle"
-        },
-        margin: { left, right: pageWidth - right },
-        didParseCell: (data) => {
-          if (data.row.index === body.length - 1) {
-            data.cell.styles.fontStyle = "bold";
-          }
-        }
-      });
-
-      y = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
-        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 5
-        : y + 30;
-
-      if (y > pageHeight - 35) {
-        doc.addPage();
-        y = 12;
-      }
-
-      const bottomLines = [
-        totalMap.get("Prev. Received")
-          ? { label: "Prev. Received", value: totalMap.get("Prev. Received") ?? "" }
-          : null,
-        totalMap.get("Today Received")
-          ? { label: "Today Received", value: totalMap.get("Today Received") ?? "" }
-          : null,
-        totalMap.get("Total Net")
-          ? { label: "Net Received", value: totalMap.get("Total Net") ?? "" }
-          : null,
-        totalMap.get("Balance")
-          ? { label: "Balance", value: totalMap.get("Balance") ?? "" }
-          : null
-      ].filter((item): item is { label: string; value: string } => Boolean(item));
-
-      bottomLines.forEach((line) => {
-        doc.setFont("helvetica", "bold");
-        doc.text(line.label, left, y);
-        doc.setFont("helvetica", "normal");
-        doc.text(`: ${line.value}`, left + 26, y);
-        y += 4.5;
-      });
-      y += 1.5;
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Remarks:", left, y);
-      y += 4;
-      doc.setFont("helvetica", "normal");
-      const extraSections = slipPreview.extraSections ?? [];
-      if (extraSections.length > 0) {
-        extraSections.forEach((section) => {
-          if (y > pageHeight - 28) {
-            doc.addPage();
-            y = 12;
-          }
-          doc.setFont("helvetica", "bold");
-          doc.text(section.title, left, y);
-          y += 4;
-          section.lines.forEach((line) => {
-            doc.setFont("helvetica", "bold");
-            doc.text(line.label, left, y);
-            doc.setFont("helvetica", "normal");
-            const valueLines = doc.splitTextToSize(`: ${line.value}`, right - left - 24);
-            doc.text(valueLines, left + 24, y);
-            y += valueLines.length * 4;
-          });
-          y += 3;
-        });
-      }
-
-      if (slipPreview.footerNote.trim()) {
-        if (y > pageHeight - 24) {
-          doc.addPage();
-          y = 12;
-        }
-        doc.setFont("helvetica", "bold");
-        doc.text("Remarks:", left, y);
-        y += 4;
-        doc.setFont("helvetica", "normal");
-        const remarksLines = doc.splitTextToSize(slipPreview.footerNote, right - left);
-        doc.text(remarksLines, left, y);
-        y += remarksLines.length * 4 + 4;
-      }
-
-      if (y > pageHeight - 18) {
-        doc.addPage();
-        y = 12;
-      }
-
-      const signatureWidth = (right - left) / 3;
-      doc.setFont("helvetica", "normal");
-      doc.text("Operator Sign : ______________", left, y);
-      doc.text("Farmer Sign : ______________", left + signatureWidth, y);
-      doc.text("Godown Incharge : ______________", left + signatureWidth * 2, y);
-
+      renderSlipPreviewPdf(doc, slipPreview);
       doc.save(fileName);
       notifyUser("Slip PDF downloaded.");
     } catch (error) {
       notifyUser(error instanceof Error ? error.message : "Unable to generate slip PDF.");
+    }
+  }
+
+  function downloadAllOverallSlips() {
+    const targetRegistrations = slipRegistrationRows.filter((item) => item.totalReceivedQtl > 0);
+    if (targetRegistrations.length === 0) {
+      notifyUser("No registration with intake found for overall slip download.");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a5"
+      });
+
+      let renderedCount = 0;
+      targetRegistrations.forEach((registration, index) => {
+        const preview = buildSlipPreview({
+          slipType: "FARMER_OVERALL",
+          slipRegistrationId: registration.id
+        });
+        if (!preview) {
+          return;
+        }
+        renderSlipPreviewPdf(doc, preview, renderedCount > 0 || index > 0);
+        renderedCount += 1;
+      });
+
+      if (renderedCount === 0) {
+        notifyUser("Unable to build overall slips for the selected filters.");
+        return;
+      }
+
+      const scopeParts = [
+        slipDistrictFilter || "ALLDIST",
+        slipVillageFilter || "ALLVILL",
+        slipClassFilter || "ALLCLASS"
+      ];
+      const fileName = `overall_slips_${scopeParts
+        .join("_")
+        .replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`;
+      doc.save(fileName);
+      notifyUser(`${renderedCount} overall slip(s) downloaded.`);
+    } catch (error) {
+      notifyUser(error instanceof Error ? error.message : "Unable to download overall slips.");
     }
   }
 
@@ -2722,24 +3374,44 @@ export default function HomePage() {
           </div>
 
           <nav className="navList">
-            {visibleNavItems.map((item) => (
-              <button
-                className={`navButton ${activeView === item.key ? "active" : ""}`}
-                disabled={isNavItemDisabled(item.key)}
-                key={item.key}
-                onClick={() => setActiveView(item.key)}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
+            {visibleNavSections.map((section) => {
+              const isExpanded = expandedNavSections[section.key] || section.key === activeNavSectionKey;
+              const hasActiveChild = section.items.some((item) => item.key === activeView);
+              return (
+                <div className={`navSection ${hasActiveChild ? "active" : ""}`} key={section.key}>
+                  <button
+                    className={`navSectionButton ${hasActiveChild ? "active" : ""}`}
+                    onClick={() => toggleNavSection(section.key)}
+                    type="button"
+                  >
+                    <span>{section.label}</span>
+                    <span className="navSectionToggle">{isExpanded ? "−" : "+"}</span>
+                  </button>
+                  {isExpanded ? (
+                    <div className="navSubList">
+                      {section.items.map((item) => (
+                        <button
+                          className={`navSubButton ${activeView === item.key ? "active" : ""}`}
+                          disabled={isNavItemDisabled(item.key)}
+                          key={item.key}
+                          onClick={() => openViewFromNav(item.key, section.key)}
+                          type="button"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </nav>
 
         </aside>
 
         <section className="contentArea">
           <div className="contentHeader">
-            <h2>{visibleNavItems.find((item) => item.key === activeView)?.label ?? "KRISHIV Seed Intake"}</h2>
+            <h2>{activeNavItem?.label ?? "KRISHIV Seed Intake"}</h2>
             <p>
               {toast ||
                 (features.discrepancyWorkflow
@@ -2757,8 +3429,12 @@ export default function HomePage() {
                   <strong>{formatNumber(dashboardMetrics.expectedYield)} QTL</strong>
                 </div>
                 <div className="metricBox">
-                  <span>Received</span>
-                  <strong>{formatNumber(dashboardMetrics.received)} QTL</strong>
+                  <span>Total Gross Weight</span>
+                  <strong>{formatNumber(dashboardMetrics.grossReceived)} QTL</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Total Net Weight</span>
+                  <strong>{formatNumber(dashboardMetrics.netReceived)} QTL</strong>
                 </div>
                 <div className="metricBox">
                   <span>Pending</span>
@@ -2791,6 +3467,8 @@ export default function HomePage() {
                   <h3>Stock Snapshot</h3>
                   <ul>
                     <li>{receipts.length} intake receipts saved in MongoDB</li>
+                    <li>{formatNumber(dashboardMetrics.grossReceived)} QTL total gross intake captured</li>
+                    <li>{formatNumber(dashboardMetrics.netReceived)} QTL total net intake captured</li>
                     <li>{godowns.length} godowns and {stacks.length} stacks available for intake</li>
                     <li>{dashboardMetrics.shiftedBags} bags shifted through {dashboardMetrics.shiftedCases} discrepancy shift entries</li>
                     <li>{formatNumber(dashboardMetrics.shiftedQty)} QTL already moved out through discrepancy handling</li>
@@ -2850,7 +3528,8 @@ export default function HomePage() {
                 <article className="infoCard">
                   <h3>Short Snapshot</h3>
                   <ul>
-                    <li>Received {formatNumber(dashboardMetrics.received)} QTL against expected {formatNumber(dashboardMetrics.expectedYield)} QTL</li>
+                    <li>Gross intake is {formatNumber(dashboardMetrics.grossReceived)} QTL and net intake is {formatNumber(dashboardMetrics.netReceived)} QTL</li>
+                    <li>Net intake is mapped against expected yield of {formatNumber(dashboardMetrics.expectedYield)} QTL</li>
                     <li>Pending balance is {formatNumber(dashboardMetrics.pending)} QTL</li>
                     <li>{dashboardMetrics.discrepancyBags} bags are pending discrepancy resolution</li>
                     <li>{dashboardMetrics.shiftedBags} bags have already been shifted out of marked stacks</li>
@@ -3273,13 +3952,15 @@ export default function HomePage() {
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                className="secondaryButton smallButton"
-                                onClick={() => setDepositViewRegistrationId(item.id)}
-                                type="button"
-                              >
-                                Deposit View
-                              </button>
+                              <div className="actionButtons">
+                                <button
+                                  className="secondaryButton smallButton"
+                                  onClick={() => setDepositViewRegistrationId(item.id)}
+                                  type="button"
+                                >
+                                  Deposit View
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -3713,6 +4394,7 @@ export default function HomePage() {
                         <th>Farmer</th>
                         <th>Village</th>
                         <th>District</th>
+                        <th>Total Bags</th>
                         <th>Total Net</th>
                         <th>Discrepancy</th>
                         <th>Action</th>
@@ -3722,6 +4404,7 @@ export default function HomePage() {
                       {voucherRows.map((item, index) => {
                         const discrepancyInfo =
                           registrationDiscrepancyMap.get(item.id) ?? { qtyQtl: 0, bags: 0 };
+                        const totalBags = registrationBagMap.get(item.id) ?? 0;
                         const existingVoucher = voucherByRegistrationId.get(item.id);
                         return (
                           <tr key={item.id}>
@@ -3730,6 +4413,7 @@ export default function HomePage() {
                             <td>{item.farmerName}</td>
                             <td>{item.village}</td>
                             <td>{item.district}</td>
+                            <td>{totalBags}</td>
                             <td>{formatNumber(item.totalReceivedQtl)} QTL</td>
                             <td>{formatNumber(discrepancyInfo.qtyQtl)} QTL</td>
                             <td>
@@ -3781,9 +4465,12 @@ export default function HomePage() {
                         <th>Date</th>
                         <th>Reg. Code</th>
                         <th>Farmer</th>
+                        <th>Total Bags</th>
                         <th>Net Qty</th>
+                        <th>Final Payable</th>
+                        <th>Net Paid</th>
+                        <th>Balance</th>
                         <th>Discrepancy Qty</th>
-                        <th>Net Payable</th>
                         <th>Status</th>
                         <th>Action</th>
                       </tr>
@@ -3795,18 +4482,56 @@ export default function HomePage() {
                           <td>{voucher.voucherDate}</td>
                           <td>{voucher.cropRegistrationCode}</td>
                           <td>{voucher.farmerName}</td>
+                          <td>{voucher.totalBags}</td>
                           <td>{formatNumber(voucher.totalNetQtyQtl)} QTL</td>
+                          <td>{formatNumber(getVoucherFinalPayable(voucher))}</td>
+                          <td>{formatNumber(getVoucherTotalPaid(voucher))}</td>
+                          <td>{formatNumber(getVoucherBalance(voucher))}</td>
                           <td>{formatNumber(voucher.discrepancyQtyQtl)} QTL</td>
-                          <td>{formatNumber(voucher.netPayableAmount)}</td>
-                          <td><span className="status active">{voucher.status}</span></td>
                           <td>
-                            <button
-                              className="smallButton"
-                              type="button"
-                              onClick={() => downloadVoucherPdf(voucher)}
-                            >
-                              Download PDF
-                            </button>
+                            <span className={`status ${voucher.status === "PAID" ? "full" : "active"}`}>
+                              {voucher.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="inlineActionRow">
+                              <button
+                                className="smallButton"
+                                type="button"
+                                onClick={() => openVoucherModal(voucher.cropRegistrationId)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="smallButton"
+                                type="button"
+                                onClick={() => {
+                                  void deleteVoucher(voucher).catch((error) => {
+                                    notifyUser(
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Unable to delete financial voucher."
+                                    );
+                                  });
+                                }}
+                              >
+                                Delete
+                              </button>
+                              <button
+                                className="smallButton"
+                                type="button"
+                                onClick={() => openPaymentLedger(voucher)}
+                              >
+                                Ledger View
+                              </button>
+                              <button
+                                className="smallButton"
+                                type="button"
+                                onClick={() => downloadVoucherPdf(voucher)}
+                              >
+                                Download PDF
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -3822,13 +4547,85 @@ export default function HomePage() {
               <section className="panel">
                 <div className="panelHeader">
                   <h3>Slip Print Center</h3>
-                  <span>Search registration and open the required slip format</span>
+                  <span>Search, filter, and open the required slip format</span>
+                </div>
+                <div className="formGrid">
+                  <label className="spanTwo">
+                    <span>Search</span>
+                    <input
+                      placeholder="Search by reg. code, farmer, village, district, or class"
+                      value={slipSearch}
+                      onChange={(event) => setSlipSearch(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>District</span>
+                    <select value={slipDistrictFilter} onChange={(event) => setSlipDistrictFilter(event.target.value)}>
+                      <option value="">All Districts</option>
+                      {slipDistrictOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Village</span>
+                    <select value={slipVillageFilter} onChange={(event) => setSlipVillageFilter(event.target.value)}>
+                      <option value="">All Villages</option>
+                      {slipVillageOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Seed Class</span>
+                    <select value={slipClassFilter} onChange={(event) => setSlipClassFilter(event.target.value)}>
+                      <option value="">All Classes</option>
+                      {slipClassOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Crop</span>
+                    <select value={slipCropFilter} onChange={(event) => setSlipCropFilter(event.target.value)}>
+                      <option value="">All Crops</option>
+                      {slipCropOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="filtersBar">
+                  <label className="checkboxRow">
+                    <input
+                      type="checkbox"
+                      checked={slipOnlyWithIntake}
+                      onChange={(event) => setSlipOnlyWithIntake(event.target.checked)}
+                    />
+                    <span>Only registrations with intake</span>
+                  </label>
+                  <button className="secondaryButton" onClick={resetSlipFilters} type="button">
+                    Reset Filters
+                  </button>
+                  <button className="primaryButton" onClick={downloadAllOverallSlips} type="button">
+                    Download All Overall Slips
+                  </button>
+                </div>
+                <div className="tableHint">
+                  Recommended use: filter by district, village, seed class, crop, and keep `Only registrations with intake` enabled before bulk download.
                 </div>
                 <div className="filtersBar">
                   <input
-                    placeholder="Search by reg. code, farmer, village, district, or class"
-                    value={slipSearch}
-                    onChange={(event) => setSlipSearch(event.target.value)}
+                    value={`${slipRegistrationRows.length} registration row(s) after filters`}
+                    readOnly
                   />
                 </div>
                 <div className="tableWrap">
@@ -3886,9 +4683,6 @@ export default function HomePage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
-                <div className="tableHint">
-                  {slipRegistrationRows.length} registration row(s)
                 </div>
               </section>
             </div>
@@ -4428,7 +5222,7 @@ export default function HomePage() {
                 />
               </label>
               <label>
-                <span>Deductions</span>
+                <span>Seed Payment</span>
                 <input
                   type="number"
                   value={voucherDeduction}
@@ -4585,12 +5379,20 @@ export default function HomePage() {
                           <td>{formatNumber(voucherPreview.voucher.grossPayableAmount)}</td>
                         </tr>
                         <tr>
-                          <td colSpan={3}>Less Deductions</td>
+                          <td colSpan={3}>Seed Payment</td>
                           <td>{formatNumber(voucherPreview.voucher.deductionAmount)}</td>
                         </tr>
                         <tr className="slipClassicTotalRow">
                           <td colSpan={3}>Net Payable Amount</td>
                           <td>{formatNumber(voucherPreview.voucher.netPayableAmount)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3}>Rounded Off</td>
+                          <td>{formatNumber(voucherPreview.voucher.roundedOffAmount ?? 0)}</td>
+                        </tr>
+                        <tr className="slipClassicTotalRow">
+                          <td colSpan={3}>Final Payable Amount</td>
+                          <td>{formatNumber(getVoucherFinalPayable(voucherPreview.voucher))}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -4611,6 +5413,143 @@ export default function HomePage() {
               ) : (
                 <p>Enter rates and generate the voucher to preview it here.</p>
               )}
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {paymentLedgerVoucher ? (
+        <div className="modalOverlay" onClick={closePaymentLedger} role="presentation">
+          <div
+            className="modalCard"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="panelHeader">
+              <h3>Ledger View</h3>
+              <button className="ghostButton" onClick={closePaymentLedger} type="button">
+                Close
+              </button>
+            </div>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Voucher Ledger Summary</h3>
+                <span>{paymentLedgerVoucher.status}</span>
+              </div>
+              <div className="selectedCard">
+                <strong>{paymentLedgerVoucher.voucherNo}</strong>
+                <span>{paymentLedgerVoucher.cropRegistrationCode} | {paymentLedgerVoucher.farmerName}</span>
+                <span>
+                  Final Payable {formatNumber(getVoucherFinalPayable(paymentLedgerVoucher))} | Net Paid{" "}
+                  {formatNumber(getVoucherTotalPaid(paymentLedgerVoucher))} | Balance{" "}
+                  {formatNumber(getVoucherBalance(paymentLedgerVoucher))}
+                </span>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Record Payment</h3>
+                <span>RTGS / NEFT entry</span>
+              </div>
+              <div className="formGrid">
+                <label>
+                  <span>Payment Date</span>
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(event) => setPaymentDate(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Amount</span>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={(event) => setPaymentAmount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Mode</span>
+                  <input value="RTGS/NEFT" readOnly />
+                </label>
+                <label>
+                  <span>Transaction No.</span>
+                  <input
+                    value={paymentTransactionNo}
+                    onChange={(event) => setPaymentTransactionNo(event.target.value)}
+                  />
+                </label>
+                <label className="spanTwo">
+                  <span>Remarks</span>
+                  <input
+                    value={paymentRemarks}
+                    onChange={(event) => setPaymentRemarks(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="actionsFooter">
+                <button
+                  className="primaryButton"
+                  onClick={() => {
+                    void addVoucherPayment().catch((error) => {
+                      notifyUser(error instanceof Error ? error.message : "Unable to add voucher payment.");
+                    });
+                  }}
+                  type="button"
+                >
+                  Add Payment
+                </button>
+                <button
+                  className="secondaryButton"
+                  onClick={() => downloadPaymentLedgerPdf(paymentLedgerVoucher)}
+                  type="button"
+                >
+                  Download Ledger
+                </button>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Payment History</h3>
+                <span>{paymentLedgerVoucher.payments?.length ?? 0} payment(s)</span>
+              </div>
+              <div className="tableWrap">
+                <table className="registrationTable compactTable">
+                  <thead>
+                    <tr>
+                      <th>S.No.</th>
+                      <th>Date</th>
+                      <th>Mode</th>
+                      <th>Transaction No.</th>
+                      <th>Amount</th>
+                      <th>Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(paymentLedgerVoucher.payments ?? []).length > 0 ? (
+                      paymentLedgerVoucher.payments.map((payment: FinancialVoucherPayment, index) => (
+                        <tr key={payment.id}>
+                          <td>{index + 1}</td>
+                          <td>{formatDateDisplay(payment.paymentDate)}</td>
+                          <td>{payment.mode || "RTGS/NEFT"}</td>
+                          <td>{payment.transactionNo}</td>
+                          <td>{formatNumber(Number(payment.amount ?? 0))}</td>
+                          <td>{payment.remarks || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6}>No payments recorded yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
         </div>
@@ -4996,6 +5935,7 @@ export default function HomePage() {
                       <th>Gross</th>
                       <th>Net</th>
                       <th>Moisture</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5010,6 +5950,16 @@ export default function HomePage() {
                         <td>{formatNumber(item.grossWeightQtl)} QTL</td>
                         <td>{formatNumber(item.netWeightQtl)} QTL</td>
                         <td>{formatNumber(item.moisturePercent)}%</td>
+                        <td>
+                          <button
+                            className="secondaryButton smallButton"
+                            disabled={!effectivePermissions?.canEdit}
+                            onClick={() => startEditReceiptFromDeposit(item.receiptNo)}
+                            type="button"
+                          >
+                            Edit Receipt
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
