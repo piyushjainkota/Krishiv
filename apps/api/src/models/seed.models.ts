@@ -30,6 +30,14 @@ const SeasonSchema = new Schema(
   { timestamps: true }
 );
 
+const CounterSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    value: { type: Number, required: true, default: 0 }
+  },
+  { timestamps: true }
+);
+
 const FarmerSchema = new Schema(
   {
     farmerCode: { type: String },
@@ -332,6 +340,7 @@ StackSchema.index({ godownId: 1, stackNo: 1 }, { unique: true });
 
 export const UserModel = mongoose.models.User ?? mongoose.model("User", UserSchema);
 export const SeasonModel = mongoose.models.Season ?? mongoose.model("Season", SeasonSchema);
+export const CounterModel = mongoose.models.Counter ?? mongoose.model("Counter", CounterSchema);
 export const FarmerModel = mongoose.models.Farmer ?? mongoose.model("Farmer", FarmerSchema);
 export const ImportBatchModel =
   mongoose.models.ImportBatch ?? mongoose.model("ImportBatch", ImportSchema);

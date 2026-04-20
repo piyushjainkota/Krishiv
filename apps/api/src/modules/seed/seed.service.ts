@@ -24,6 +24,7 @@ import type {
 import { config } from "../../config";
 import {
   AuditLogModel,
+  CounterModel,
   DiscrepancyModel,
   DiscrepancyShiftModel,
   FinancialVoucherModel,
@@ -137,28 +138,8 @@ function calculateWeightPerBagKg(netWeightQtl: number, noOfBags: number) {
   return roundQtl((netWeightQtl * 100) / noOfBags);
 }
 
-function nextReceiptNumber(receiptNos: string[]) {
-  const max = receiptNos.reduce((current, value) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? Math.max(current, parsed) : current;
-  }, 0);
-
-  return String(max + 1).padStart(3, "0");
-}
-
 function buildSeasonKey(season: string, year: string) {
   return `${String(season).trim().toUpperCase()}::${String(year).trim().toUpperCase()}`;
-}
-
-function nextSequentialLotNo(existingLotNos: number[]) {
-  const used = new Set(existingLotNos.filter((value) => Number.isInteger(value) && value > 0));
-  let next = 1;
-
-  while (used.has(next)) {
-    next += 1;
-  }
-
-  return next;
 }
 
 function nextDiscrepancyNumber(discrepancyNos: string[]) {
@@ -178,19 +159,6 @@ function formatVoucherSeasonPart(season: string, year: string) {
     return `${normalizedSeason}${match[1].slice(2)}-${match[2].slice(-2)}`;
   }
   return `${normalizedSeason}${normalizedYear}`;
-}
-
-function nextVoucherNumber(existingVoucherNos: string[], season: string, year: string) {
-  const prefix = `${formatVoucherSeasonPart(season, year)}/`;
-  const matching = existingVoucherNos.filter((item) => item.startsWith(prefix));
-  let max = 0;
-  for (const value of matching) {
-    const parsed = Number(String(value).slice(prefix.length));
-    if (Number.isFinite(parsed)) {
-      max = Math.max(max, parsed);
-    }
-  }
-  return `${prefix}${String(max + 1).padStart(2, "0")}`;
 }
 
 function timestampForFolder() {
@@ -1011,6 +979,197 @@ export class SeedService {
     return stack;
   }
 
+  private async reserveNextReceiptNumber(
+    seasonKey: string,
+    session?: ClientSession | null
+  ) {
+    const counterId = `RECEIPT_SEQ:${seasonKey}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const existingCounterQuery = CounterModel.findOne({ id: counterId });
+      if (session) {
+        existingCounterQuery.session(session);
+      }
+      const existingCounter = await existingCounterQuery.lean();
+
+      if (!existingCounter) {
+        const receiptMaxQuery = ReceiptModel.find({ seasonKey }, { receiptSequenceNo: 1, receiptNo: 1, _id: 0 })
+          .sort({ receiptSequenceNo: -1, receiptNo: -1 })
+          .limit(1);
+        if (session) {
+          receiptMaxQuery.session(session);
+        }
+        const currentMaxReceipt = await receiptMaxQuery.lean();
+        const currentMaxValue = currentMaxReceipt.reduce((max, item) => {
+          const sequenceNo = Number(item.receiptSequenceNo ?? 0);
+          if (Number.isFinite(sequenceNo) && sequenceNo > 0) {
+            return Math.max(max, sequenceNo);
+          }
+          const parsedReceiptNo = Number(String(item.receiptNo ?? ""));
+          return Number.isFinite(parsedReceiptNo) ? Math.max(max, parsedReceiptNo) : max;
+        }, 0);
+
+        try {
+          await CounterModel.create([{
+            id: counterId,
+            value: currentMaxValue
+          }], { session: session ?? undefined });
+        } catch {
+          continue;
+        }
+      }
+
+      const counter = await CounterModel.findOneAndUpdate(
+        { id: counterId },
+        { $inc: { value: 1 } },
+        {
+          new: true,
+          session: session ?? undefined
+        }
+      ).lean();
+
+      const nextValue = Number(counter?.value ?? 0);
+      if (Number.isFinite(nextValue) && nextValue > 0) {
+        return String(nextValue).padStart(3, "0");
+      }
+    }
+
+    throw new Error("Unable to reserve the next receipt number.");
+  }
+
+  private async reserveNextLotNo(
+    cropRegistrationId: string,
+    session?: ClientSession | null
+  ) {
+    const counterId = `LOT_SEQ:${cropRegistrationId}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const existingCounterQuery = CounterModel.findOne({ id: counterId });
+      if (session) {
+        existingCounterQuery.session(session);
+      }
+      const existingCounter = await existingCounterQuery.lean();
+
+      if (!existingCounter) {
+        const maxLotQuery = LotModel.find({ cropRegistrationId }, { lotNo: 1, _id: 0 })
+          .sort({ lotNo: -1 })
+          .limit(1);
+        if (session) {
+          maxLotQuery.session(session);
+        }
+        const currentMaxLotNo = Number((await maxLotQuery.lean())[0]?.lotNo ?? 0);
+
+        try {
+          await CounterModel.create([{
+            id: counterId,
+            value: currentMaxLotNo
+          }], { session: session ?? undefined });
+        } catch {
+          continue;
+        }
+      }
+
+      const reserved = await CounterModel.findOneAndUpdate(
+        { id: counterId },
+        { $inc: { value: 1 } },
+        {
+          new: true,
+          session: session ?? undefined
+        }
+      ).lean();
+
+      const nextValue = Number(reserved?.value ?? 0);
+      if (Number.isFinite(nextValue) && nextValue > 0) {
+        return nextValue;
+      }
+    }
+
+    throw new Error("Unable to reserve the next lot number.");
+  }
+
+  private async reserveNextVoucherNumber(
+    season: string,
+    year: string,
+    session?: ClientSession | null
+  ) {
+    const seasonKey = buildSeasonKey(season, year);
+    const counterId = `VOUCHER_SEQ:${seasonKey}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const existingCounterQuery = CounterModel.findOne({ id: counterId });
+      if (session) {
+        existingCounterQuery.session(session);
+      }
+      const existingCounter = await existingCounterQuery.lean();
+
+      if (!existingCounter) {
+        const prefix = `${formatVoucherSeasonPart(season, year)}/`;
+        const existingVoucherNosQuery = FinancialVoucherModel.find(
+          { season, year },
+          { voucherNo: 1, _id: 0 }
+        );
+        if (session) {
+          existingVoucherNosQuery.session(session);
+        }
+        const existingVoucherNos = (await existingVoucherNosQuery.lean()).map((item) =>
+          String(item.voucherNo ?? "")
+        );
+        const currentMax = existingVoucherNos.reduce((max, value) => {
+          if (!value.startsWith(prefix)) {
+            return max;
+          }
+          const parsed = Number(String(value).slice(prefix.length));
+          return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+        }, 0);
+
+        try {
+          await CounterModel.create([{
+            id: counterId,
+            value: currentMax
+          }], { session: session ?? undefined });
+        } catch {
+          continue;
+        }
+      }
+
+      const reserved = await CounterModel.findOneAndUpdate(
+        { id: counterId },
+        { $inc: { value: 1 } },
+        {
+          new: true,
+          session: session ?? undefined
+        }
+      ).lean();
+
+      const nextValue = Number(reserved?.value ?? 0);
+      if (Number.isFinite(nextValue) && nextValue > 0) {
+        return `${formatVoucherSeasonPart(season, year)}/${String(nextValue).padStart(2, "0")}`;
+      }
+    }
+
+    throw new Error("Unable to reserve the next voucher number.");
+  }
+
+  private async assertReceiptUnlockedByVoucher(
+    cropRegistrationId: string,
+    operationLabel: string,
+    session?: ClientSession | null
+  ) {
+    const voucherQuery = FinancialVoucherModel.findOne(
+      { cropRegistrationId },
+      { voucherNo: 1, status: 1, _id: 0 }
+    );
+    if (session) {
+      voucherQuery.session(session);
+    }
+    const voucher = await voucherQuery.lean();
+    if (voucher) {
+      throw new Error(
+        `${operationLabel} is blocked because voucher ${voucher.voucherNo} already exists for this registration. Update the voucher only after the intake source is finalized.`
+      );
+    }
+  }
+
   private async rollbackReceipt(
     receiptRef: string,
     cropRegistrationId?: string,
@@ -1353,6 +1512,12 @@ export class SeedService {
       throw new Error("Selected registration is not active for intake.");
     }
 
+    await this.assertReceiptUnlockedByVoucher(
+      registration.id,
+      input.receiptNo?.trim() ? "Receipt update" : "Receipt save",
+      session
+    );
+
     const godownQuery = GodownModel.find();
     const stackQuery = StackModel.find();
     if (session) {
@@ -1417,12 +1582,6 @@ export class SeedService {
 
       let remainingQty = roundQtl(netWeightQtl);
       const allocations: { lotId: string; lotCode: string; qtyQtl: number }[] = [];
-      let nextLotNo = nextSequentialLotNo(
-        openLots
-          .filter((lot) => lot.cropRegistrationId === registrationState.id)
-          .map((lot) => Number(lot.lotNo ?? 0))
-      );
-
       for (const lot of matchingLots) {
         if (remainingQty <= 0) {
           break;
@@ -1436,8 +1595,8 @@ export class SeedService {
         const nextQty = roundQtl(lot.currentQtyQtl + allocatedQty);
         remainingQty = roundQtl(remainingQty - allocatedQty);
 
-        await LotModel.updateOne(
-          { id: lot.id },
+        const lotUpdate = await LotModel.updateOne(
+          { id: lot.id, currentQtyQtl: lot.currentQtyQtl, status: "OPEN" },
           {
             $set: {
               currentQtyQtl: nextQty,
@@ -1446,6 +1605,11 @@ export class SeedService {
           },
           { session: session ?? undefined }
         );
+        if (lotUpdate.matchedCount === 0) {
+          throw new Error(
+            "Another online entry updated the same lot while this receipt was being saved. Refresh and try again."
+          );
+        }
 
         allocations.push({
           lotId: lot.id,
@@ -1457,12 +1621,13 @@ export class SeedService {
       while (remainingQty > 0) {
         const allocatedQty = roundQtl(Math.min(remainingQty, 200));
         const lotId = randomUUID();
-        const lotCode = `${registrationState.year}/${registrationState.cropRegistrationCode}/L${nextLotNo}`;
+        const reservedLotNo = await this.reserveNextLotNo(registrationState.id, session);
+        const lotCode = `${registrationState.year}/${registrationState.cropRegistrationCode}/L${reservedLotNo}`;
         const lot = await LotModel.create([{
           id: lotId,
           cropRegistrationId: registrationState.id,
           cropRegistrationCode: registrationState.cropRegistrationCode,
-          lotNo: nextLotNo,
+          lotNo: reservedLotNo,
           lotCode,
           godownId: godown.id,
           godownName: godown.name,
@@ -1485,14 +1650,9 @@ export class SeedService {
           ...openLots,
           {
             ...lot[0].toObject(),
-            lotNo: nextLotNo
+            lotNo: reservedLotNo
           }
         ];
-        nextLotNo = nextSequentialLotNo(
-          openLots
-            .filter((existingLot) => existingLot.cropRegistrationId === registrationState.id)
-            .map((existingLot) => Number(existingLot.lotNo ?? 0))
-        );
         remainingQty = roundQtl(remainingQty - allocatedQty);
       }
 
@@ -1522,13 +1682,16 @@ export class SeedService {
     }
 
     const seasonKey = buildSeasonKey(registrationState.season, registrationState.year);
-    const numericReceiptNo = Number(input.receiptNo);
+    const receiptNo = input.receiptNo?.trim()
+      ? input.receiptNo.trim()
+      : await this.reserveNextReceiptNumber(seasonKey, session);
+    const numericReceiptNo = Number(receiptNo);
     const receipt = await ReceiptModel.create([{
       id: randomUUID(),
       seasonKey,
       season: registrationState.season,
       year: registrationState.year,
-      receiptNo: input.receiptNo,
+      receiptNo,
       receiptSequenceNo: Number.isFinite(numericReceiptNo) ? numericReceiptNo : 0,
       receiptDate: input.receiptDate,
       cropRegistrationId: registrationState.id,
@@ -1537,8 +1700,13 @@ export class SeedService {
       lines
     }], { session: session ?? undefined });
 
-    await RegistrationModel.updateOne(
-      { id: registrationState.id },
+    const registrationUpdate = await RegistrationModel.updateOne(
+      {
+        id: registrationState.id,
+        totalReceivedQtl: registration.totalReceivedQtl,
+        balanceQtl: registration.balanceQtl,
+        status: registration.status
+      },
       {
         $set: {
           totalReceivedQtl: registrationState.totalReceivedQtl,
@@ -1548,6 +1716,11 @@ export class SeedService {
       },
       { session: session ?? undefined }
     );
+    if (registrationUpdate.matchedCount === 0) {
+      throw new Error(
+        "Another online entry changed this registration while the receipt was being saved. Refresh and try again."
+      );
+    }
 
     await AuditLogModel.create([{
       entityType: "RECEIPT",
@@ -1563,23 +1736,11 @@ export class SeedService {
 
   async saveReceipt(input: CreateReceiptInput) {
     await this.ensureCompatibility();
-    const registration = await RegistrationModel.findOne({
-      id: input.cropRegistrationId
-    }).lean<RegistrationRecord | null>();
-    if (!registration) {
-      throw new Error("Registration not found.");
-    }
-
-    const seasonKey = buildSeasonKey(registration.season, registration.year);
-    const existingReceiptNos = (
-      await ReceiptModel.find({ seasonKey }, { receiptNo: 1, _id: 0 }).lean()
-    ).map((item) => item.receiptNo);
-
     return this.runInTransaction((session) =>
       this.persistReceipt(
         {
           ...input,
-          receiptNo: input.receiptNo?.trim() || nextReceiptNumber(existingReceiptNos)
+          receiptNo: input.receiptNo?.trim() || ""
         },
         session
       )
@@ -1588,6 +1749,7 @@ export class SeedService {
 
   async updateReceipt(receiptRef: string, input: UpdateReceiptInput) {
     return this.runInTransaction(async (session) => {
+      await this.assertReceiptUnlockedByVoucher(input.cropRegistrationId, "Receipt update", session);
       await this.rollbackReceipt(receiptRef, input.cropRegistrationId, session);
       return this.persistReceipt(input, session);
     });
@@ -1595,6 +1757,15 @@ export class SeedService {
 
   async deleteReceipt(receiptRef: string) {
     return this.runInTransaction(async (session) => {
+      const existingReceipt = await this.findReceiptByReference(receiptRef, undefined, session);
+      if (!existingReceipt) {
+        throw new Error("Receipt not found.");
+      }
+      await this.assertReceiptUnlockedByVoucher(
+        existingReceipt.cropRegistrationId,
+        "Receipt delete",
+        session
+      );
       const rolledBack = await this.rollbackReceipt(receiptRef, undefined, session);
       if (!rolledBack) {
         throw new Error("Receipt not found.");
@@ -1800,19 +1971,11 @@ export class SeedService {
     const finalPayableAmount = Math.round(netPayableAmount);
     const roundedOffAmount = roundQtl(finalPayableAmount - netPayableAmount);
     const paymentSummary = this.buildVoucherPaymentSummary(existingPayments, finalPayableAmount);
-    const existingVoucherNos = existingVoucher
-      ? []
-      : (
-          await FinancialVoucherModel.find(
-            { season: registration.season, year: registration.year },
-            { voucherNo: 1, _id: 0 }
-          ).lean()
-        ).map((item) => String(item.voucherNo ?? ""));
     return {
       id: existingVoucher?.id ?? randomUUID(),
       voucherNo:
         existingVoucher?.voucherNo ??
-        nextVoucherNumber(existingVoucherNos, registration.season, registration.year),
+        await this.reserveNextVoucherNumber(registration.season, registration.year),
       voucherDate: input.voucherDate,
       cropRegistrationId: registration.id,
       cropRegistrationCode: registration.cropRegistrationCode,
@@ -2008,58 +2171,102 @@ export class SeedService {
 
   async addFinancialVoucherPayment(voucherId: string, input: AddFinancialVoucherPaymentInput) {
     await this.ensureCompatibility();
-    const existingVoucher = await FinancialVoucherModel.findOne({ id: voucherId }).lean();
-    if (!existingVoucher) {
-      throw new Error("Financial voucher not found.");
-    }
+    return this.runInTransaction(async (session) => {
+      const voucherQuery = FinancialVoucherModel.findOne({ id: voucherId });
+      if (session) {
+        voucherQuery.session(session);
+      }
+      const existingVoucher = await voucherQuery.lean();
+      if (!existingVoucher) {
+        throw new Error("Financial voucher not found.");
+      }
 
-    const payment = {
-      id: randomUUID(),
-      paymentDate: input.paymentDate,
-      amount: roundQtl(Number(input.amount ?? 0)),
-      transactionNo: input.transactionNo.trim(),
-      mode: "RTGS/NEFT",
-      remarks: input.remarks?.trim() || ""
-    };
+      const normalizedTransactionNo = input.transactionNo.trim().toUpperCase();
+      if (!normalizedTransactionNo) {
+        throw new Error("Transaction number is required.");
+      }
 
-    const payments = [...(existingVoucher.payments ?? []), payment];
-    const finalPayableAmount = roundQtl(
-      Number(existingVoucher.finalPayableAmount ?? existingVoucher.netPayableAmount ?? 0)
-    );
-    const paymentSummary = this.buildVoucherPaymentSummary(
-      payments.map((item) => ({
-        paymentDate: String(item.paymentDate ?? ""),
-        amount: roundQtl(Number(item.amount ?? 0))
-      })),
-      finalPayableAmount
-    );
+      const duplicateInVoucher = (existingVoucher.payments ?? []).some(
+        (payment: { transactionNo?: unknown }) =>
+          String(payment.transactionNo ?? "").trim().toUpperCase() === normalizedTransactionNo
+      );
+      if (duplicateInVoucher) {
+        throw new Error("This transaction number is already recorded in the voucher ledger.");
+      }
 
-    await FinancialVoucherModel.updateOne(
-      { id: voucherId },
-      {
-        $set: {
-          payments,
-          totalPaidAmount: paymentSummary.totalPaidAmount,
-          balanceAmount: paymentSummary.balanceAmount,
-          lastPaymentDate: paymentSummary.lastPaymentDate,
-          status: paymentSummary.status
+      const duplicateAcrossVouchersQuery = FinancialVoucherModel.findOne({
+        id: { $ne: voucherId },
+        "payments.transactionNo": normalizedTransactionNo
+      });
+      if (session) {
+        duplicateAcrossVouchersQuery.session(session);
+      }
+      const duplicateAcrossVouchers = await duplicateAcrossVouchersQuery.lean();
+      if (duplicateAcrossVouchers) {
+        throw new Error(
+          `Transaction number already exists in voucher ${duplicateAcrossVouchers.voucherNo}.`
+        );
+      }
+
+      const payment = {
+        id: randomUUID(),
+        paymentDate: input.paymentDate,
+        amount: roundQtl(Number(input.amount ?? 0)),
+        transactionNo: normalizedTransactionNo,
+        mode: "RTGS/NEFT",
+        remarks: input.remarks?.trim() || ""
+      };
+
+      const payments = [...(existingVoucher.payments ?? []), payment];
+      const finalPayableAmount = roundQtl(
+        Number(existingVoucher.finalPayableAmount ?? existingVoucher.netPayableAmount ?? 0)
+      );
+      const paymentSummary = this.buildVoucherPaymentSummary(
+        payments.map((item) => ({
+          paymentDate: String(item.paymentDate ?? ""),
+          amount: roundQtl(Number(item.amount ?? 0))
+        })),
+        finalPayableAmount
+      );
+
+      const voucherUpdate = await FinancialVoucherModel.updateOne(
+        {
+          id: voucherId,
+          totalPaidAmount: roundQtl(Number(existingVoucher.totalPaidAmount ?? 0)),
+          balanceAmount: roundQtl(Number(existingVoucher.balanceAmount ?? 0)),
+          status: String(existingVoucher.status ?? "DRAFT")
+        },
+        {
+          $set: {
+            payments,
+            totalPaidAmount: paymentSummary.totalPaidAmount,
+            balanceAmount: paymentSummary.balanceAmount,
+            lastPaymentDate: paymentSummary.lastPaymentDate,
+            status: paymentSummary.status
+          }
+        },
+        { session: session ?? undefined }
+      );
+      if (voucherUpdate.matchedCount === 0) {
+        throw new Error(
+          "Another online change updated this voucher while payment was being recorded. Refresh and try again."
+        );
+      }
+
+      await AuditLogModel.create([{
+        entityType: "FINANCIAL_VOUCHER",
+        entityId: voucherId,
+        action: "PAYMENT_ADDED",
+        payload: {
+          voucherNo: existingVoucher.voucherNo,
+          paymentDate: payment.paymentDate,
+          amount: payment.amount,
+          transactionNo: payment.transactionNo
         }
-      }
-    );
+      }], { session: session ?? undefined });
 
-    await AuditLogModel.create({
-      entityType: "FINANCIAL_VOUCHER",
-      entityId: voucherId,
-      action: "PAYMENT_ADDED",
-      payload: {
-        voucherNo: existingVoucher.voucherNo,
-        paymentDate: payment.paymentDate,
-        amount: payment.amount,
-        transactionNo: payment.transactionNo
-      }
+      return this.bootstrap();
     });
-
-    return this.bootstrap();
   }
 
   async deleteFinancialVoucher(voucherId: string, input: FinancialVoucherActionInput) {

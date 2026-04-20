@@ -499,6 +499,8 @@ export default function HomePage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentTransactionNo, setPaymentTransactionNo] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
+  const [isSavingReceipt, setIsSavingReceipt] = useState(false);
+  const [isAddingVoucherPayment, setIsAddingVoucherPayment] = useState(false);
   const [importMessage, setImportMessage] = useState("Import the farmer master Excel to begin.");
   const [importAdminPassword, setImportAdminPassword] = useState("");
   const [backupDirectory, setBackupDirectory] = useState("D:\\KRISHIV seed DATA\\mongo-backups");
@@ -1208,11 +1210,16 @@ export default function HomePage() {
       notifyUser("Select a registration first.");
       return;
     }
+    if (isSavingReceipt) {
+      notifyUser("Receipt save is already in progress. Please wait.");
+      return;
+    }
 
     const isEditing = Boolean(editingReceiptNo);
     const currentReceiptNo = receiptNo;
 
     void (async () => {
+      setIsSavingReceipt(true);
       const totalDraftNetWeight = draftLines.reduce(
         (sum, line) => sum + Number(line.netWeightQtl ?? 0),
         0
@@ -1318,6 +1325,8 @@ export default function HomePage() {
       );
     })().catch((error) => {
       notifyUser(error instanceof Error ? error.message : "Unable to save receipt.");
+    }).finally(() => {
+      setIsSavingReceipt(false);
     });
   }
 
@@ -2716,6 +2725,10 @@ export default function HomePage() {
       notifyUser("Select a voucher first.");
       return;
     }
+    if (isAddingVoucherPayment) {
+      notifyUser("Payment save is already in progress. Please wait.");
+      return;
+    }
     const amount = Number(paymentAmount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
       notifyUser("Enter payment amount.");
@@ -2726,64 +2739,69 @@ export default function HomePage() {
       return;
     }
 
-    const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        paymentDate,
-        amount,
-        transactionNo: paymentTransactionNo.trim(),
-        remarks: paymentRemarks
-      })
-    });
+    setIsAddingVoucherPayment(true);
+    try {
+      const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          paymentDate,
+          amount,
+          transactionNo: paymentTransactionNo.trim(),
+          remarks: paymentRemarks
+        })
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null);
-      throw new Error(errorBody?.message || "Unable to add voucher payment.");
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to add voucher payment.");
+      }
+
+      const data = (await response.json()) as {
+        registrations: RegistrationRecord[];
+        godowns: Godown[];
+        stacks: Stack[];
+        lots: CertificationLot[];
+        discrepancies: IntakeDiscrepancy[];
+        discrepancyShifts: DiscrepancyShift[];
+        financialVouchers: FinancialVoucher[];
+        receipts: IntakeReceipt[];
+        features?: { discrepancyWorkflow?: boolean };
+      };
+
+      setRegistrations(data.registrations ?? []);
+      setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+      setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+      setLots(data.lots ?? []);
+      setDiscrepancies(data.discrepancies ?? []);
+      setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setFinancialVouchers(data.financialVouchers ?? []);
+      setReceipts(data.receipts ?? []);
+      setFeatures({
+        discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+      });
+      if (voucherPreview?.voucher.id === paymentLedgerVoucher.id) {
+        const refreshed =
+          (data.financialVouchers ?? []).find((item) => item.id === paymentLedgerVoucher.id) ?? null;
+        setVoucherPreview(
+          refreshed
+            ? {
+                voucher: refreshed,
+                hasDiscrepancy: Number(refreshed.discrepancyQtyQtl ?? 0) > 0
+              }
+            : null
+        );
+      }
+      setPaymentDate(new Date().toISOString().slice(0, 10));
+      setPaymentAmount("");
+      setPaymentTransactionNo("");
+      setPaymentRemarks("");
+      notifyUser(`Payment recorded for voucher ${paymentLedgerVoucher.voucherNo}.`);
+    } finally {
+      setIsAddingVoucherPayment(false);
     }
-
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
-
-    setRegistrations(data.registrations ?? []);
-    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
-    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
-    setLots(data.lots ?? []);
-    setDiscrepancies(data.discrepancies ?? []);
-    setDiscrepancyShifts(data.discrepancyShifts ?? []);
-    setFinancialVouchers(data.financialVouchers ?? []);
-    setReceipts(data.receipts ?? []);
-    setFeatures({
-      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
-    });
-    if (voucherPreview?.voucher.id === paymentLedgerVoucher.id) {
-      const refreshed =
-        (data.financialVouchers ?? []).find((item) => item.id === paymentLedgerVoucher.id) ?? null;
-      setVoucherPreview(
-        refreshed
-          ? {
-              voucher: refreshed,
-              hasDiscrepancy: Number(refreshed.discrepancyQtyQtl ?? 0) > 0
-            }
-          : null
-      );
-    }
-    setPaymentDate(new Date().toISOString().slice(0, 10));
-    setPaymentAmount("");
-    setPaymentTransactionNo("");
-    setPaymentRemarks("");
-    notifyUser(`Payment recorded for voucher ${paymentLedgerVoucher.voucherNo}.`);
   }
 
   function downloadVoucherPdf(voucher: FinancialVoucher) {
@@ -4145,12 +4163,17 @@ export default function HomePage() {
                   <button
                     className="primaryButton"
                     disabled={
-                      editingReceiptNo ? !effectivePermissions?.canEdit : !effectivePermissions?.canEntry
+                      isSavingReceipt ||
+                      (editingReceiptNo ? !effectivePermissions?.canEdit : !effectivePermissions?.canEntry)
                     }
                     onClick={saveReceipt}
                     type="button"
                   >
-                    {editingReceiptNo ? "Update Intake Receipt" : "Save Intake Receipt"}
+                    {isSavingReceipt
+                      ? "Saving..."
+                      : editingReceiptNo
+                        ? "Update Intake Receipt"
+                        : "Save Intake Receipt"}
                   </button>
                 </div>
               </section>
@@ -5492,17 +5515,18 @@ export default function HomePage() {
               </div>
 
               <div className="actionsFooter">
-                <button
-                  className="primaryButton"
-                  onClick={() => {
-                    void addVoucherPayment().catch((error) => {
-                      notifyUser(error instanceof Error ? error.message : "Unable to add voucher payment.");
-                    });
-                  }}
-                  type="button"
-                >
-                  Add Payment
-                </button>
+                  <button
+                    className="primaryButton"
+                    disabled={isAddingVoucherPayment}
+                    onClick={() => {
+                      void addVoucherPayment().catch((error) => {
+                        notifyUser(error instanceof Error ? error.message : "Unable to add voucher payment.");
+                      });
+                    }}
+                    type="button"
+                  >
+                    {isAddingVoucherPayment ? "Saving..." : "Add Payment"}
+                  </button>
                 <button
                   className="secondaryButton"
                   onClick={() => downloadPaymentLedgerPdf(paymentLedgerVoucher)}
