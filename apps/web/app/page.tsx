@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -51,7 +51,7 @@ type SidebarSectionKey =
   | "reporting"
   | "administration";
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ??
+  process.env.NEXT_PUBLIC_API_BASE?.trim() ||
   (typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.hostname}:4000`
     : "http://127.0.0.1:4000");
@@ -202,6 +202,24 @@ type VoucherPreview = {
   hasDiscrepancy: boolean;
 };
 
+type CoreBootstrapPayload = {
+  registrations: RegistrationRecord[];
+  godowns: Godown[];
+  stacks: Stack[];
+  features?: { discrepancyWorkflow?: boolean };
+};
+
+type OperationalBootstrapPayload = {
+  lots: CertificationLot[];
+  discrepancies: IntakeDiscrepancy[];
+  discrepancyShifts: DiscrepancyShift[];
+  financialVouchers: FinancialVoucher[];
+  receipts: IntakeReceipt[];
+  features?: { discrepancyWorkflow?: boolean };
+};
+
+type FullBootstrapPayload = CoreBootstrapPayload & OperationalBootstrapPayload;
+
 const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "GODOWN_WISE_DETAIL", label: "Godown Wise Detail" },
   { value: "DISTRICT_WISE_DETAIL", label: "District Wise Detail" },
@@ -287,8 +305,12 @@ function getVoucherTotalPaid(voucher: FinancialVoucher) {
 
 function getVoucherBalance(voucher: FinancialVoucher) {
   return Number(
-    voucher.balanceAmount ?? Math.max(getVoucherFinalPayable(voucher) - getVoucherTotalPaid(voucher), 0)
+    voucher.balanceAmount ?? Number((getVoucherFinalPayable(voucher) - getVoucherTotalPaid(voucher)).toFixed(2))
   );
+}
+
+function isVoucherLockedStatus(status: string) {
+  return status === "PAID" || status === "OVERPAID";
 }
 
 function formatDateDisplay(value: string) {
@@ -485,6 +507,7 @@ export default function HomePage() {
   const [slipPreview, setSlipPreview] = useState<SlipPreview | null>(null);
   const [slipModalOpen, setSlipModalOpen] = useState(false);
   const [voucherSearch, setVoucherSearch] = useState("");
+  const [voucherDistrictFilter, setVoucherDistrictFilter] = useState("");
   const [voucherRegistrationId, setVoucherRegistrationId] = useState("");
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().slice(0, 10));
@@ -499,8 +522,14 @@ export default function HomePage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentTransactionNo, setPaymentTransactionNo] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
+  const [editingVoucherPaymentId, setEditingVoucherPaymentId] = useState("");
+  const [paymentAdminPassword, setPaymentAdminPassword] = useState("");
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [isAddingVoucherPayment, setIsAddingVoucherPayment] = useState(false);
+  const [hasLoadedCoreData, setHasLoadedCoreData] = useState(false);
+  const [hasLoadedOperationalData, setHasLoadedOperationalData] = useState(false);
+  const [isLoadingOperationalData, setIsLoadingOperationalData] = useState(false);
+  const operationalLoadInFlightRef = useRef(false);
   const [importMessage, setImportMessage] = useState("Import the farmer master Excel to begin.");
   const [importAdminPassword, setImportAdminPassword] = useState("");
   const [backupDirectory, setBackupDirectory] = useState("D:\\KRISHIV seed DATA\\mongo-backups");
@@ -545,6 +574,38 @@ export default function HomePage() {
       ...init,
       headers
     });
+  }
+
+  function applyCoreBootstrap(data: CoreBootstrapPayload) {
+    setRegistrations(data.registrations ?? []);
+    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+    setFeatures({
+      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+    });
+    setSelectedRegistrationId((current) => current || data.registrations?.[0]?.id || "");
+    setSlipRegistrationId((current) => current || data.registrations?.[0]?.id || "");
+    setHasLoadedCoreData(true);
+  }
+
+  function applyOperationalBootstrap(data: OperationalBootstrapPayload) {
+    setLots(data.lots ?? []);
+    setDiscrepancies(data.discrepancies ?? []);
+    setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setFinancialVouchers(data.financialVouchers ?? []);
+    setReceipts(data.receipts ?? []);
+    setFeatures((current) => ({
+      ...current,
+      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow ?? current.discrepancyWorkflow)
+    }));
+    setSlipDate((current) => current || data.receipts?.[0]?.receiptDate || "");
+    setReceiptNo(nextReceiptNo(data.receipts ?? []));
+    setHasLoadedOperationalData(true);
+  }
+
+  function applyFullBootstrap(data: FullBootstrapPayload) {
+    applyCoreBootstrap(data);
+    applyOperationalBootstrap(data);
   }
 
   function notifyUser(message: string, useDialog = true) {
@@ -604,8 +665,46 @@ export default function HomePage() {
     setLoginError("");
     setVoucherModalOpen(false);
     setSlipModalOpen(false);
+    setHasLoadedCoreData(false);
+    setHasLoadedOperationalData(false);
+    setLots([]);
+    setDiscrepancies([]);
+    setDiscrepancyShifts([]);
+    setFinancialVouchers([]);
+    setReceipts([]);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("krishiv-auth");
+    }
+  }
+
+  async function loadCoreBootstrap() {
+    const response = await fetchWithAuth(`${API_BASE}/api/seed/bootstrap/core`);
+    if (!response.ok) {
+      throw new Error("Unable to load seed data from API.");
+    }
+
+    const data = (await response.json()) as CoreBootstrapPayload;
+    applyCoreBootstrap(data);
+  }
+
+  async function loadOperationalBootstrap() {
+    if (operationalLoadInFlightRef.current) {
+      return;
+    }
+
+    operationalLoadInFlightRef.current = true;
+    setIsLoadingOperationalData(true);
+    try {
+      const response = await fetchWithAuth(`${API_BASE}/api/seed/bootstrap/operations`);
+      if (!response.ok) {
+        throw new Error("Unable to load operational data from API.");
+      }
+
+      const data = (await response.json()) as OperationalBootstrapPayload;
+      applyOperationalBootstrap(data);
+    } finally {
+      operationalLoadInFlightRef.current = false;
+      setIsLoadingOperationalData(false);
     }
   }
 
@@ -615,33 +714,8 @@ export default function HomePage() {
       throw new Error("Unable to load seed data from API.");
     }
 
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
-
-    setRegistrations(data.registrations ?? []);
-    setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
-    setStacks(data.stacks?.length ? data.stacks : defaultStacks);
-    setLots(data.lots ?? []);
-    setDiscrepancies(data.discrepancies ?? []);
-    setDiscrepancyShifts(data.discrepancyShifts ?? []);
-    setFinancialVouchers(data.financialVouchers ?? []);
-    setReceipts(data.receipts ?? []);
-    setFeatures({
-      discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
-    });
-    setSelectedRegistrationId((current) => current || data.registrations?.[0]?.id || "");
-    setSlipRegistrationId((current) => current || data.registrations?.[0]?.id || "");
-    setSlipDate((current) => current || data.receipts?.[0]?.receiptDate || "");
-    setReceiptNo(nextReceiptNo(data.receipts ?? []));
+    const data = (await response.json()) as FullBootstrapPayload;
+    applyFullBootstrap(data);
   }
 
   useEffect(() => {
@@ -665,12 +739,46 @@ export default function HomePage() {
     if (!currentUser) {
       return;
     }
-    void loadBootstrap().catch((error) => {
+    void loadCoreBootstrap()
+      .then(() => {
+        void loadOperationalBootstrap().catch((error) => {
+          setToast(error instanceof Error ? error.message : "Unable to load operational data.");
+        });
+      })
+      .catch((error) => {
       setToast(error instanceof Error ? error.message : "Unable to connect to API.");
       setGodowns(defaultGodowns);
       setStacks(defaultStacks);
-    });
+      });
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || hasLoadedOperationalData || isLoadingOperationalData) {
+      return;
+    }
+
+    const viewsNeedingOperationalData: ViewKey[] = [
+      "dashboard",
+      "registrations",
+      "intake",
+      "intakeEdit",
+      "finance",
+      "slips",
+      "lots",
+      "discrepancies",
+      "validations",
+      "backup",
+      "restore"
+    ];
+
+    if (!viewsNeedingOperationalData.includes(activeView)) {
+      return;
+    }
+
+    void loadOperationalBootstrap().catch((error) => {
+      setToast(error instanceof Error ? error.message : "Unable to load operational data.");
+    });
+  }, [activeView, currentUser, hasLoadedOperationalData, isLoadingOperationalData]);
 
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId);
   const editingReceipt = receipts.find((item) => item.receiptNo === editingReceiptNo);
@@ -889,15 +997,34 @@ export default function HomePage() {
     .filter((item) => item.status !== "BLOCKED")
     .filter((item) => {
       const query = voucherSearch.trim().toLowerCase();
-      if (!query) {
-        return true;
-      }
-      return (
+      const matchesSearch =
+        !query ||
         item.cropRegistrationCode.toLowerCase().includes(query) ||
         item.farmerName.toLowerCase().includes(query) ||
         item.village.toLowerCase().includes(query) ||
-        item.district.toLowerCase().includes(query)
-      );
+        item.district.toLowerCase().includes(query);
+      const matchesDistrict = !voucherDistrictFilter || item.district === voucherDistrictFilter;
+      return matchesSearch && matchesDistrict;
+    })
+    .slice()
+    .sort((left, right) =>
+      left.farmerName.localeCompare(right.farmerName, "en", { sensitivity: "base" })
+    );
+  const voucherDistrictOptions = Array.from(
+    new Set(registrations.map((item) => item.district).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const filteredVoucherRegisterRows = financialVouchers
+    .filter((voucher) => {
+      const query = voucherSearch.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        voucher.voucherNo.toLowerCase().includes(query) ||
+        voucher.cropRegistrationCode.toLowerCase().includes(query) ||
+        voucher.farmerName.toLowerCase().includes(query) ||
+        voucher.village.toLowerCase().includes(query) ||
+        voucher.district.toLowerCase().includes(query);
+      const matchesDistrict = !voucherDistrictFilter || voucher.district === voucherDistrictFilter;
+      return matchesSearch && matchesDistrict;
     })
     .slice()
     .sort((left, right) =>
@@ -2463,7 +2590,7 @@ export default function HomePage() {
     }
     const existingVoucher = voucherByRegistrationId.get(registrationId) ?? null;
     let overridePassword = adminPassword;
-    if (existingVoucher?.status === "PAID" && !overridePassword) {
+    if (existingVoucher && isVoucherLockedStatus(existingVoucher.status) && !overridePassword) {
       const prompted = promptAdminPassword(existingVoucher.voucherNo, "Editing");
       if (prompted === null) {
         return;
@@ -2503,6 +2630,8 @@ export default function HomePage() {
     setPaymentAmount("");
     setPaymentTransactionNo("");
     setPaymentRemarks("");
+    setEditingVoucherPaymentId("");
+    setPaymentAdminPassword("");
   }
 
   function closePaymentLedger() {
@@ -2511,6 +2640,21 @@ export default function HomePage() {
     setPaymentAmount("");
     setPaymentTransactionNo("");
     setPaymentRemarks("");
+    setEditingVoucherPaymentId("");
+    setPaymentAdminPassword("");
+  }
+
+  function startEditVoucherPayment(voucher: FinancialVoucher, payment: FinancialVoucherPayment) {
+    if (!requirePermission("canVoucher", "Your role cannot manage voucher payments.")) {
+      return;
+    }
+    setPaymentLedgerVoucherId(voucher.id);
+    setEditingVoucherPaymentId(payment.id);
+    setPaymentDate(payment.paymentDate);
+    setPaymentAmount(String(payment.amount ?? ""));
+    setPaymentTransactionNo(payment.transactionNo ?? "");
+    setPaymentRemarks(payment.remarks ?? "");
+    setPaymentAdminPassword("");
   }
 
   async function generateVoucher() {
@@ -2663,7 +2807,7 @@ export default function HomePage() {
     }
 
     let overridePassword = adminPassword;
-    if (voucher.status === "PAID" && !overridePassword) {
+    if (isVoucherLockedStatus(voucher.status) && !overridePassword) {
       const prompted = promptAdminPassword(voucher.voucherNo, "Deleting");
       if (prompted === null) {
         return;
@@ -2741,8 +2885,13 @@ export default function HomePage() {
 
     setIsAddingVoucherPayment(true);
     try {
-      const response = await fetchWithAuth(`${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments`, {
-        method: "POST",
+      const isEditingPayment = Boolean(editingVoucherPaymentId);
+      const response = await fetchWithAuth(
+        isEditingPayment
+          ? `${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments/${editingVoucherPaymentId}`
+          : `${API_BASE}/api/seed/financial-vouchers/${paymentLedgerVoucher.id}/payments`,
+        {
+        method: isEditingPayment ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json"
         },
@@ -2750,38 +2899,18 @@ export default function HomePage() {
           paymentDate,
           amount,
           transactionNo: paymentTransactionNo.trim(),
-          remarks: paymentRemarks
+          remarks: paymentRemarks,
+          adminPassword: paymentAdminPassword
         })
       });
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
-        throw new Error(errorBody?.message || "Unable to add voucher payment.");
+        throw new Error(errorBody?.message || "Unable to save voucher payment.");
       }
 
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-      };
-
-      setRegistrations(data.registrations ?? []);
-      setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
-      setStacks(data.stacks?.length ? data.stacks : defaultStacks);
-      setLots(data.lots ?? []);
-      setDiscrepancies(data.discrepancies ?? []);
-      setDiscrepancyShifts(data.discrepancyShifts ?? []);
-      setFinancialVouchers(data.financialVouchers ?? []);
-      setReceipts(data.receipts ?? []);
-      setFeatures({
-        discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
-      });
+      const data = (await response.json()) as FullBootstrapPayload;
+      applyFullBootstrap(data);
       if (voucherPreview?.voucher.id === paymentLedgerVoucher.id) {
         const refreshed =
           (data.financialVouchers ?? []).find((item) => item.id === paymentLedgerVoucher.id) ?? null;
@@ -2798,18 +2927,22 @@ export default function HomePage() {
       setPaymentAmount("");
       setPaymentTransactionNo("");
       setPaymentRemarks("");
-      notifyUser(`Payment recorded for voucher ${paymentLedgerVoucher.voucherNo}.`);
+      setEditingVoucherPaymentId("");
+      setPaymentAdminPassword("");
+      notifyUser(
+        isEditingPayment
+          ? `Payment entry updated for voucher ${paymentLedgerVoucher.voucherNo}.`
+          : `Payment recorded for voucher ${paymentLedgerVoucher.voucherNo}.`
+      );
     } finally {
       setIsAddingVoucherPayment(false);
     }
   }
 
-  function downloadVoucherPdf(voucher: FinancialVoucher) {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a5"
-    });
+  function renderVoucherPdfPage(doc: jsPDF, voucher: FinancialVoucher, addPage = false) {
+    if (addPage) {
+      doc.addPage("a5", "portrait");
+    }
     const left = 10;
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -3014,9 +3147,39 @@ export default function HomePage() {
     doc.line(left, y, right, y);
     y += 4;
     doc.line(left, y, right, y);
+  }
+
+  function downloadVoucherPdf(voucher: FinancialVoucher) {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+    renderVoucherPdfPage(doc, voucher);
 
     doc.save(`${voucher.voucherNo.replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`);
     notifyUser(`Voucher ${voucher.voucherNo} downloaded.`);
+  }
+
+  function downloadBulkVoucherPdf(vouchers: FinancialVoucher[]) {
+    if (!vouchers.length) {
+      notifyUser("No vouchers match the current filter for bulk download.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+
+    vouchers.forEach((voucher, index) => {
+      renderVoucherPdfPage(doc, voucher, index > 0);
+    });
+
+    const districtLabel = voucherDistrictFilter || "ALL_DISTRICTS";
+    doc.save(`financial_vouchers_${districtLabel.replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`);
+    notifyUser(`${vouchers.length} voucher(s) downloaded in one PDF.`);
   }
 
   function downloadPaymentLedgerPdf(voucher: FinancialVoucher) {
@@ -3045,10 +3208,7 @@ export default function HomePage() {
     ]);
 
     (voucher.payments ?? []).forEach((payment, index) => {
-      runningBalance = Math.max(
-        0,
-        Number((runningBalance - Number(payment.amount ?? 0)).toFixed(2))
-      );
+      runningBalance = Number((runningBalance - Number(payment.amount ?? 0)).toFixed(2));
       ledgerRows.push([
         formatDateDisplay(payment.paymentDate),
         `${index === 0 ? "Payment" : "Other Payment"} by RTGS/NEFT`,
@@ -3380,6 +3540,12 @@ export default function HomePage() {
           </button>
         </div>
       </header>
+
+      {!hasLoadedCoreData ? (
+        <div className="infoStrip">Loading core data...</div>
+      ) : isLoadingOperationalData && !hasLoadedOperationalData ? (
+        <div className="infoStrip">Loading detailed operational data in the background...</div>
+      ) : null}
 
       <div className="layout">
         <aside className="sidebar">
@@ -4407,6 +4573,17 @@ export default function HomePage() {
                     value={voucherSearch}
                     onChange={(event) => setVoucherSearch(event.target.value)}
                   />
+                  <select
+                    value={voucherDistrictFilter}
+                    onChange={(event) => setVoucherDistrictFilter(event.target.value)}
+                  >
+                    <option value="">All Districts</option>
+                    {voucherDistrictOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="tableWrap">
                   <table className="registrationTable compactTable">
@@ -4478,7 +4655,32 @@ export default function HomePage() {
               <section className="panel">
                 <div className="panelHeader">
                   <h3>Voucher Register</h3>
-                  <span>{financialVouchers.length} voucher(s)</span>
+                  <span>{filteredVoucherRegisterRows.length} voucher(s)</span>
+                </div>
+                <div className="filtersBar">
+                  <input
+                    placeholder="Search voucher no., reg. code, farmer, village, or district"
+                    value={voucherSearch}
+                    onChange={(event) => setVoucherSearch(event.target.value)}
+                  />
+                  <select
+                    value={voucherDistrictFilter}
+                    onChange={(event) => setVoucherDistrictFilter(event.target.value)}
+                  >
+                    <option value="">All Districts</option>
+                    {voucherDistrictOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    onClick={() => downloadBulkVoucherPdf(filteredVoucherRegisterRows)}
+                  >
+                    Bulk Download PDF
+                  </button>
                 </div>
                 <div className="tableWrap">
                   <table className="registrationTable compactTable">
@@ -4499,7 +4701,7 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {financialVouchers.map((voucher) => (
+                      {filteredVoucherRegisterRows.map((voucher) => (
                         <tr key={voucher.id}>
                           <td>{voucher.voucherNo}</td>
                           <td>{voucher.voucherDate}</td>
@@ -4512,7 +4714,15 @@ export default function HomePage() {
                           <td>{formatNumber(getVoucherBalance(voucher))}</td>
                           <td>{formatNumber(voucher.discrepancyQtyQtl)} QTL</td>
                           <td>
-                            <span className={`status ${voucher.status === "PAID" ? "full" : "active"}`}>
+                            <span
+                              className={`status ${
+                                voucher.status === "PAID"
+                                  ? "full"
+                                  : voucher.status === "OVERPAID"
+                                    ? "blocked"
+                                    : "active"
+                              }`}
+                            >
                               {voucher.status}
                             </span>
                           </td>
@@ -5474,8 +5684,8 @@ export default function HomePage() {
 
             <section className="panel">
               <div className="panelHeader">
-                <h3>Record Payment</h3>
-                <span>RTGS / NEFT entry</span>
+                <h3>{editingVoucherPaymentId ? "Edit Payment Entry" : "Record Payment"}</h3>
+                <span>{editingVoucherPaymentId ? "Update existing RTGS / NEFT entry" : "RTGS / NEFT entry"}</span>
               </div>
               <div className="formGrid">
                 <label>
@@ -5512,21 +5722,51 @@ export default function HomePage() {
                     onChange={(event) => setPaymentRemarks(event.target.value)}
                   />
                 </label>
+                {paymentLedgerVoucher && isVoucherLockedStatus(paymentLedgerVoucher.status) ? (
+                  <label className="spanTwo">
+                    <span>Admin Password</span>
+                    <input
+                      type="password"
+                      value={paymentAdminPassword}
+                      onChange={(event) => setPaymentAdminPassword(event.target.value)}
+                    />
+                  </label>
+                ) : null}
               </div>
 
               <div className="actionsFooter">
+                <button
+                  className="primaryButton"
+                  disabled={isAddingVoucherPayment}
+                  onClick={() => {
+                    void addVoucherPayment().catch((error) => {
+                      notifyUser(error instanceof Error ? error.message : "Unable to save voucher payment.");
+                    });
+                  }}
+                  type="button"
+                >
+                  {isAddingVoucherPayment
+                    ? "Saving..."
+                    : editingVoucherPaymentId
+                      ? "Update Payment"
+                      : "Add Payment"}
+                </button>
+                {editingVoucherPaymentId ? (
                   <button
-                    className="primaryButton"
-                    disabled={isAddingVoucherPayment}
+                    className="secondaryButton"
                     onClick={() => {
-                      void addVoucherPayment().catch((error) => {
-                        notifyUser(error instanceof Error ? error.message : "Unable to add voucher payment.");
-                      });
+                      setEditingVoucherPaymentId("");
+                      setPaymentDate(new Date().toISOString().slice(0, 10));
+                      setPaymentAmount("");
+                      setPaymentTransactionNo("");
+                      setPaymentRemarks("");
+                      setPaymentAdminPassword("");
                     }}
                     type="button"
                   >
-                    {isAddingVoucherPayment ? "Saving..." : "Add Payment"}
+                    Cancel Edit
                   </button>
+                ) : null}
                 <button
                   className="secondaryButton"
                   onClick={() => downloadPaymentLedgerPdf(paymentLedgerVoucher)}
@@ -5552,6 +5792,7 @@ export default function HomePage() {
                       <th>Transaction No.</th>
                       <th>Amount</th>
                       <th>Remarks</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5564,11 +5805,20 @@ export default function HomePage() {
                           <td>{payment.transactionNo}</td>
                           <td>{formatNumber(Number(payment.amount ?? 0))}</td>
                           <td>{payment.remarks || "-"}</td>
+                          <td>
+                            <button
+                              className="smallButton"
+                              type="button"
+                              onClick={() => startEditVoucherPayment(paymentLedgerVoucher, payment)}
+                            >
+                              Edit
+                            </button>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6}>No payments recorded yet.</td>
+                        <td colSpan={7}>No payments recorded yet.</td>
                       </tr>
                     )}
                   </tbody>

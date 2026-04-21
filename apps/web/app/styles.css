@@ -113,6 +113,14 @@ th {
   color: rgba(255, 255, 255, 0.8);
 }
 
+.infoStrip {
+  background: #fff3df;
+  border-bottom: 1px solid #e2cba8;
+  color: #6d4d2b;
+  font-size: 0.9rem;
+  padding: 10px 24px;
+}
+
 .headerMeta {
   display: flex;
   gap: 12px;

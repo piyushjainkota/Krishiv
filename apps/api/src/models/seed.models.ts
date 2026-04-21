@@ -257,7 +257,9 @@ const FinancialVoucherPaymentSchema = new Schema(
     amount: { type: Number, required: true },
     transactionNo: { type: String, required: true },
     mode: { type: String, required: true, default: "RTGS/NEFT" },
-    remarks: { type: String, default: "" }
+    remarks: { type: String, default: "" },
+    createdBy: { type: String, default: "" },
+    updatedBy: { type: String, default: "" }
   },
   { _id: false }
 );

@@ -101,6 +101,10 @@ export const addFinancialVoucherPaymentSchema = z.object({
   remarks: z.string().optional().default("")
 });
 
+export const updateFinancialVoucherPaymentSchema = addFinancialVoucherPaymentSchema.extend({
+  adminPassword: z.string().optional().default("")
+});
+
 export const loginSchema = z.object({
   email: z.string().trim().min(1),
   password: z.string().min(1)
@@ -156,6 +160,7 @@ export type CreateFinancialVoucherInput = z.infer<typeof createFinancialVoucherS
 export type UpdateFinancialVoucherInput = z.infer<typeof updateFinancialVoucherSchema>;
 export type FinancialVoucherActionInput = z.infer<typeof financialVoucherActionSchema>;
 export type AddFinancialVoucherPaymentInput = z.infer<typeof addFinancialVoucherPaymentSchema>;
+export type UpdateFinancialVoucherPaymentInput = z.infer<typeof updateFinancialVoucherPaymentSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type BackupDatabaseInput = z.infer<typeof backupDatabaseSchema>;
 export type RestoreDatabaseInput = z.infer<typeof restoreDatabaseSchema>;

@@ -12,6 +12,7 @@ import {
   loginSchema,
   reportFilterSchema,
   restoreDatabaseSchema,
+  updateFinancialVoucherPaymentSchema,
   updateFinancialVoucherSchema,
   updateReceiptSchema
 } from "./seed.schemas";
@@ -58,6 +59,22 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       return denied;
     }
     return seedService.bootstrap();
+  });
+
+  app.get("/api/seed/bootstrap/core", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER", "USER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    return seedService.bootstrapCore();
+  });
+
+  app.get("/api/seed/bootstrap/operations", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER", "USER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    return seedService.bootstrapOperational();
   });
 
   app.post("/api/seed/import/registrations", async (request, reply) => {
@@ -203,7 +220,26 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       return reply.status(400).send(parsed.error.flatten());
     }
     const voucherId = String((request.params as { voucherId: string }).voucherId);
-    return seedService.addFinancialVoucherPayment(voucherId, parsed.data);
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+    };
+    return seedService.addFinancialVoucherPayment(voucherId, parsed.data, actor.user);
+  });
+
+  app.put("/api/seed/financial-vouchers/:voucherId/payments/:paymentId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = updateFinancialVoucherPaymentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const params = request.params as { voucherId: string; paymentId: string };
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+    };
+    return seedService.updateFinancialVoucherPayment(params.voucherId, params.paymentId, parsed.data, actor.user);
   });
 
   app.post("/api/seed/reports/preview", async (request, reply) => {

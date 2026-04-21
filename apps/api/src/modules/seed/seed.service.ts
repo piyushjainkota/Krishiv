@@ -18,6 +18,7 @@ import type {
   LoginInput,
   ReportFilterInput,
   RestoreDatabaseInput,
+  UpdateFinancialVoucherPaymentInput,
   UpdateFinancialVoucherInput,
   UpdateReceiptInput
 } from "./seed.schemas";
@@ -74,6 +75,7 @@ const defaultUsers = [
 const execFileAsync = promisify(execFile);
 
 type AppRole = "ADMIN" | "MANAGER" | "USER";
+type ActorUser = { email: string; role: AppRole };
 
 const permissionMatrix: Record<
   AppRole,
@@ -214,10 +216,17 @@ function deriveVoucherStatus(finalPayableAmount: number, totalPaidAmount: number
   if (totalPaidAmount <= 0) {
     return "DRAFT";
   }
-  if (totalPaidAmount >= finalPayableAmount) {
+  if (totalPaidAmount > finalPayableAmount) {
+    return "OVERPAID";
+  }
+  if (totalPaidAmount === finalPayableAmount) {
     return "PAID";
   }
   return "PART PAID";
+}
+
+function isVoucherLockedStatus(status: string) {
+  return status === "PAID" || status === "OVERPAID";
 }
 
 function nextRegistrationState(registration: RegistrationRecord, addedQtyQtl: number) {
@@ -385,6 +394,8 @@ type FinancialVoucherPreview = {
     transactionNo: string;
     mode: string;
     remarks: string;
+    createdBy?: string;
+    updatedBy?: string;
   }[];
 };
 
@@ -634,10 +645,26 @@ export class SeedService {
       .sort();
     return {
       totalPaidAmount,
-      balanceAmount: roundQtl(Math.max(finalPayableAmount - totalPaidAmount, 0)),
+      balanceAmount: roundQtl(finalPayableAmount - totalPaidAmount),
       lastPaymentDate: sortedDates[sortedDates.length - 1] ?? "",
       status: deriveVoucherStatus(finalPayableAmount, totalPaidAmount)
     };
+  }
+
+  private async assertVoucherPaymentEditable(
+    voucher: { status?: string },
+    payment: { createdBy?: string },
+    actor: ActorUser,
+    adminPassword?: string
+  ) {
+    if (isVoucherLockedStatus(String(voucher.status ?? "DRAFT"))) {
+      await this.verifyAdminPassword(adminPassword);
+    }
+
+    const paymentCreator = String(payment.createdBy ?? "").trim().toLowerCase();
+    if (actor.role !== "ADMIN" && paymentCreator && paymentCreator !== actor.email.trim().toLowerCase()) {
+      throw new Error("Only the original payment entry user or admin can edit this ledger entry.");
+    }
   }
 
   async loginUser(input: LoginInput) {
@@ -778,6 +805,18 @@ export class SeedService {
   }
 
   async bootstrap() {
+    const [core, operations] = await Promise.all([
+      this.bootstrapCore(),
+      this.bootstrapOperational()
+    ]);
+
+    return {
+      ...core,
+      ...operations
+    };
+  }
+
+  async bootstrapCore() {
     await this.ensureCompatibility();
     if ((await GodownModel.countDocuments()) === 0) {
       await GodownModel.insertMany(defaultGodowns);
@@ -787,10 +826,25 @@ export class SeedService {
       await StackModel.insertMany(defaultStacks);
     }
 
-    const [registrations, godowns, stacks, lots, receipts, discrepancies, discrepancyShifts, financialVouchers] = await Promise.all([
+    const [registrations, godowns, stacks] = await Promise.all([
       RegistrationModel.find().sort({ cropRegistrationCode: 1 }).lean(),
       GodownModel.find().sort({ name: 1 }).lean(),
-      StackModel.find().sort({ stackNo: 1 }).lean(),
+      StackModel.find().sort({ stackNo: 1 }).lean()
+    ]);
+
+    return {
+      registrations,
+      godowns,
+      stacks,
+      features: {
+        discrepancyWorkflow: config.enableDiscrepancyWorkflow
+      }
+    };
+  }
+
+  async bootstrapOperational() {
+    await this.ensureCompatibility();
+    const [lots, receipts, discrepancies, discrepancyShifts, financialVouchers] = await Promise.all([
       LotModel.find().sort({ lotCode: 1 }).lean(),
       ReceiptModel.find().sort({ createdAt: -1 }).lean(),
       DiscrepancyModel.find().sort({ createdAt: -1 }).lean(),
@@ -799,9 +853,6 @@ export class SeedService {
     ]);
 
     return {
-      registrations,
-      godowns,
-      stacks,
       lots,
       receipts,
       discrepancies,
@@ -1959,7 +2010,9 @@ export class SeedService {
       amount: roundQtl(Number(payment.amount ?? 0)),
       transactionNo: String(payment.transactionNo ?? ""),
       mode: String(payment.mode ?? "RTGS/NEFT"),
-      remarks: String(payment.remarks ?? "")
+      remarks: String(payment.remarks ?? ""),
+      createdBy: String(payment.createdBy ?? ""),
+      updatedBy: String(payment.updatedBy ?? "")
     }));
     const certifiedQtyQtl = roundQtl(Math.max(totalNetQtyQtl - discrepancyQtyQtl, 0));
     const certifiedAmount = roundQtl(certifiedQtyQtl * input.certifiedRatePerQtl);
@@ -2084,7 +2137,7 @@ export class SeedService {
     if (!existingVoucher) {
       throw new Error("Financial voucher not found.");
     }
-    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+    if (isVoucherLockedStatus(String(existingVoucher.status ?? "DRAFT"))) {
       await this.verifyAdminPassword(input.adminPassword);
     }
     if (existingVoucher.cropRegistrationId !== input.cropRegistrationId) {
@@ -2126,7 +2179,7 @@ export class SeedService {
     if (!existingVoucher) {
       throw new Error("Financial voucher not found.");
     }
-    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+    if (isVoucherLockedStatus(String(existingVoucher.status ?? "DRAFT"))) {
       throw new Error("Voucher is already marked as paid.");
     }
 
@@ -2169,9 +2222,13 @@ export class SeedService {
     return this.bootstrap();
   }
 
-  async addFinancialVoucherPayment(voucherId: string, input: AddFinancialVoucherPaymentInput) {
+  async addFinancialVoucherPayment(
+    voucherId: string,
+    input: AddFinancialVoucherPaymentInput,
+    actor: ActorUser
+  ) {
     await this.ensureCompatibility();
-    return this.runInTransaction(async (session) => {
+    await this.runInTransaction(async (session) => {
       const voucherQuery = FinancialVoucherModel.findOne({ id: voucherId });
       if (session) {
         voucherQuery.session(session);
@@ -2214,7 +2271,9 @@ export class SeedService {
         amount: roundQtl(Number(input.amount ?? 0)),
         transactionNo: normalizedTransactionNo,
         mode: "RTGS/NEFT",
-        remarks: input.remarks?.trim() || ""
+        remarks: input.remarks?.trim() || "",
+        createdBy: actor.email,
+        updatedBy: actor.email
       };
 
       const payments = [...(existingVoucher.payments ?? []), payment];
@@ -2264,9 +2323,144 @@ export class SeedService {
           transactionNo: payment.transactionNo
         }
       }], { session: session ?? undefined });
-
-      return this.bootstrap();
     });
+    return this.bootstrap();
+  }
+
+  async updateFinancialVoucherPayment(
+    voucherId: string,
+    paymentId: string,
+    input: UpdateFinancialVoucherPaymentInput,
+    actor: ActorUser
+  ) {
+    await this.ensureCompatibility();
+    await this.runInTransaction(async (session) => {
+      const voucherQuery = FinancialVoucherModel.findOne({ id: voucherId });
+      if (session) {
+        voucherQuery.session(session);
+      }
+      const existingVoucher = await voucherQuery.lean();
+      if (!existingVoucher) {
+        throw new Error("Financial voucher not found.");
+      }
+
+      const existingPayments: FinancialVoucherRecord["payments"] = (existingVoucher.payments ?? []).map((payment: {
+        id?: unknown;
+        paymentDate?: unknown;
+        amount?: unknown;
+        transactionNo?: unknown;
+        mode?: unknown;
+        remarks?: unknown;
+        createdBy?: unknown;
+        updatedBy?: unknown;
+      }) => ({
+        id: String(payment.id ?? ""),
+        paymentDate: String(payment.paymentDate ?? ""),
+        amount: roundQtl(Number(payment.amount ?? 0)),
+        transactionNo: String(payment.transactionNo ?? "").trim().toUpperCase(),
+        mode: String(payment.mode ?? "RTGS/NEFT"),
+        remarks: String(payment.remarks ?? ""),
+        createdBy: String(payment.createdBy ?? ""),
+        updatedBy: String(payment.updatedBy ?? "")
+      }));
+
+      const targetPayment = existingPayments.find((payment) => payment.id === paymentId);
+      if (!targetPayment) {
+        throw new Error("Voucher payment entry not found.");
+      }
+
+      await this.assertVoucherPaymentEditable(existingVoucher, targetPayment, actor, input.adminPassword);
+
+      const normalizedTransactionNo = input.transactionNo.trim().toUpperCase();
+      if (!normalizedTransactionNo) {
+        throw new Error("Transaction number is required.");
+      }
+
+      const duplicateInVoucher = existingPayments.some(
+        (payment) => payment.id !== paymentId && payment.transactionNo === normalizedTransactionNo
+      );
+      if (duplicateInVoucher) {
+        throw new Error("This transaction number is already recorded in the voucher ledger.");
+      }
+
+      const duplicateAcrossVouchersQuery = FinancialVoucherModel.findOne({
+        id: { $ne: voucherId },
+        "payments.transactionNo": normalizedTransactionNo
+      });
+      if (session) {
+        duplicateAcrossVouchersQuery.session(session);
+      }
+      const duplicateAcrossVouchers = await duplicateAcrossVouchersQuery.lean();
+      if (duplicateAcrossVouchers) {
+        throw new Error(
+          `Transaction number already exists in voucher ${duplicateAcrossVouchers.voucherNo}.`
+        );
+      }
+
+      const payments = existingPayments.map((payment) =>
+        payment.id === paymentId
+          ? {
+              ...payment,
+              paymentDate: input.paymentDate,
+              amount: roundQtl(Number(input.amount ?? 0)),
+              transactionNo: normalizedTransactionNo,
+              mode: "RTGS/NEFT",
+              remarks: input.remarks?.trim() || "",
+              updatedBy: actor.email
+            }
+          : payment
+      );
+
+      const finalPayableAmount = roundQtl(
+        Number(existingVoucher.finalPayableAmount ?? existingVoucher.netPayableAmount ?? 0)
+      );
+      const paymentSummary = this.buildVoucherPaymentSummary(
+        payments.map((item) => ({
+          paymentDate: String(item.paymentDate ?? ""),
+          amount: roundQtl(Number(item.amount ?? 0))
+        })),
+        finalPayableAmount
+      );
+
+      const voucherUpdate = await FinancialVoucherModel.updateOne(
+        {
+          id: voucherId,
+          totalPaidAmount: roundQtl(Number(existingVoucher.totalPaidAmount ?? 0)),
+          balanceAmount: roundQtl(Number(existingVoucher.balanceAmount ?? 0)),
+          status: String(existingVoucher.status ?? "DRAFT")
+        },
+        {
+          $set: {
+            payments,
+            totalPaidAmount: paymentSummary.totalPaidAmount,
+            balanceAmount: paymentSummary.balanceAmount,
+            lastPaymentDate: paymentSummary.lastPaymentDate,
+            status: paymentSummary.status
+          }
+        },
+        { session: session ?? undefined }
+      );
+      if (voucherUpdate.matchedCount === 0) {
+        throw new Error(
+          "Another online change updated this voucher while payment was being edited. Refresh and try again."
+        );
+      }
+
+      await AuditLogModel.create([{
+        entityType: "FINANCIAL_VOUCHER",
+        entityId: voucherId,
+        action: "PAYMENT_UPDATED",
+        payload: {
+          voucherNo: existingVoucher.voucherNo,
+          paymentId,
+          paymentDate: input.paymentDate,
+          amount: roundQtl(Number(input.amount ?? 0)),
+          transactionNo: normalizedTransactionNo,
+          updatedBy: actor.email
+        }
+      }], { session: session ?? undefined });
+    });
+    return this.bootstrap();
   }
 
   async deleteFinancialVoucher(voucherId: string, input: FinancialVoucherActionInput) {
@@ -2275,7 +2469,7 @@ export class SeedService {
     if (!existingVoucher) {
       throw new Error("Financial voucher not found.");
     }
-    if (String(existingVoucher.status ?? "DRAFT") === "PAID") {
+    if (isVoucherLockedStatus(String(existingVoucher.status ?? "DRAFT"))) {
       await this.verifyAdminPassword(input.adminPassword);
     }
 

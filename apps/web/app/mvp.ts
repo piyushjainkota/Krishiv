@@ -167,6 +167,8 @@ export interface FinancialVoucherPayment {
   transactionNo: string;
   mode: string;
   remarks: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface FinancialVoucher {
