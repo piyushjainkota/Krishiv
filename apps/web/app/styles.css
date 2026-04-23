@@ -396,6 +396,150 @@ th {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.dashboardHero {
+  display: grid;
+  gap: 22px;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(168, 104, 25, 0.08), rgba(84, 46, 15, 0.03)),
+    var(--panel);
+}
+
+.dashboardIntro {
+  max-width: 760px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.dashboardHeroStats,
+.dashboardProgressGrid,
+.dashboardActionGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboardHeroStats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboardHeroCard,
+.dashboardProgressCard {
+  padding: 16px 18px;
+  border: 1px solid rgba(140, 105, 63, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.dashboardHeroCard span,
+.dashboardHeroCard small,
+.dashboardProgressMeta,
+.dashboardProgressCard .panelHeader span {
+  color: var(--muted);
+}
+
+.dashboardHeroCard strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+
+.dashboardProgressGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboardProgress {
+  height: 10px;
+  border-radius: 999px;
+  background: #eee4d6;
+  overflow: hidden;
+  margin: 14px 0 10px;
+}
+
+.dashboardProgressBar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2d8a4f, #5fa96f);
+}
+
+.dashboardProgressBarWarning {
+  background: linear-gradient(90deg, #a86f2e, #cf9548);
+}
+
+.dashboardProgressBarFinance {
+  background: linear-gradient(90deg, #254a7a, #4c78b2);
+}
+
+.dashboardProgressMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.dashboardMetricsPanel {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboardActionGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboardBoard {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+}
+
+.dashboardCard {
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(116, 84, 46, 0.16);
+  box-shadow: 0 18px 34px rgba(84, 56, 26, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(255, 255, 255, 0.98)),
+    var(--panel);
+}
+
+.dashboardCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, #274c77, #af7e3f 55%, #2f7c4f);
+}
+
+.dashboardCardExpanded {
+  grid-column: 1 / -1;
+}
+
+.dashboardCardHeader {
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eadfce;
+  margin-bottom: 14px;
+}
+
+.dashboardCardHeader p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.dashboardCard .tableWrap {
+  margin-top: 0;
+}
+
+.dashboardCard .registrationTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8f2e7;
+}
+
 .buttonGrid {
   display: grid;
   gap: 12px;
@@ -422,6 +566,25 @@ th {
   display: block;
   margin-top: 8px;
   font-size: 1.35rem;
+}
+
+.emptyStateCell {
+  text-align: center;
+  color: var(--muted);
+  padding: 18px !important;
+}
+
+.clickableRow {
+  cursor: pointer;
+}
+
+.clickableRow:hover td {
+  background: #fbf4e7;
+}
+
+.clickableRow:focus-within td,
+.clickableRow:active td {
+  background: #f5ead8;
 }
 
 .twoColumn {
@@ -658,6 +821,21 @@ th {
 .status.full {
   color: var(--warning);
   background: #fff3df;
+}
+
+.status.draft {
+  color: #7b5b13;
+  background: #fff4d9;
+}
+
+.status.paid {
+  color: #1c6a42;
+  background: #e8f6ed;
+}
+
+.status.overpaid {
+  color: #214e87;
+  background: #e6f0fb;
 }
 
 .treeNode {
@@ -900,6 +1078,10 @@ th {
 
 @media (max-width: 1200px) {
   .metricsPanel,
+  .dashboardHeroStats,
+  .dashboardProgressGrid,
+  .dashboardActionGrid,
+  .dashboardBoard,
   .buttonGrid,
   .compact,
   .slipSummaryGrid,
@@ -951,6 +1133,10 @@ th {
   .filtersBar,
   .formGrid,
   .metricsPanel,
+  .dashboardHeroStats,
+  .dashboardProgressGrid,
+  .dashboardActionGrid,
+  .dashboardBoard,
   .buttonGrid,
   .compact,
   .slipSummaryGrid,
@@ -964,6 +1150,10 @@ th {
   .panelHeaderActions,
   .paginationBar {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboardProgressMeta {
     flex-direction: column;
   }
 
@@ -1147,6 +1337,12 @@ th {
   .buttonGrid,
   .metricsPanel {
     width: 100%;
+  }
+
+  .dashboardHero,
+  .dashboardHeroCard,
+  .dashboardProgressCard {
+    padding: 16px;
   }
 
   .mastersHero,

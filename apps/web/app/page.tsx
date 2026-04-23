@@ -506,8 +506,10 @@ export default function HomePage() {
   const [slipDate, setSlipDate] = useState("");
   const [slipPreview, setSlipPreview] = useState<SlipPreview | null>(null);
   const [slipModalOpen, setSlipModalOpen] = useState(false);
-  const [voucherSearch, setVoucherSearch] = useState("");
-  const [voucherDistrictFilter, setVoucherDistrictFilter] = useState("");
+  const [voucherGenerationSearch, setVoucherGenerationSearch] = useState("");
+  const [voucherGenerationDistrictFilter, setVoucherGenerationDistrictFilter] = useState("");
+  const [voucherRegisterSearch, setVoucherRegisterSearch] = useState("");
+  const [voucherRegisterDistrictFilter, setVoucherRegisterDistrictFilter] = useState("");
   const [voucherRegistrationId, setVoucherRegistrationId] = useState("");
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().slice(0, 10));
@@ -526,6 +528,16 @@ export default function HomePage() {
   const [paymentAdminPassword, setPaymentAdminPassword] = useState("");
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [isAddingVoucherPayment, setIsAddingVoucherPayment] = useState(false);
+  const [dashboardExpandedSections, setDashboardExpandedSections] = useState<
+    Record<string, boolean>
+  >({
+    districts: false,
+    godowns: false,
+    pendingRegistrations: false,
+    stackHotspots: false,
+    recentReceipts: false,
+    recentVouchers: false
+  });
   const [hasLoadedCoreData, setHasLoadedCoreData] = useState(false);
   const [hasLoadedOperationalData, setHasLoadedOperationalData] = useState(false);
   const [isLoadingOperationalData, setIsLoadingOperationalData] = useState(false);
@@ -613,6 +625,18 @@ export default function HomePage() {
     if (useDialog && typeof window !== "undefined") {
       window.alert(message);
     }
+  }
+
+  function confirmDestructiveAction({
+    itemLabel
+  }: {
+    itemLabel: string;
+  }) {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.confirm(`Do you want to process the deletion?\n\n${itemLabel}`);
   }
 
   function requirePermission(permission: keyof RolePermissions, message: string) {
@@ -863,6 +887,47 @@ export default function HomePage() {
     shiftedBags: discrepancyShifts.reduce((sum, item) => sum + item.shiftedBags, 0),
     shiftedCases: discrepancyShifts.length
   };
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const intakeCoveragePct =
+    dashboardMetrics.expectedYield > 0
+      ? Math.min((dashboardMetrics.netReceived / dashboardMetrics.expectedYield) * 100, 100)
+      : 0;
+  const discrepancyExposurePct =
+    dashboardMetrics.netReceived > 0
+      ? (dashboardMetrics.discrepancyQty / dashboardMetrics.netReceived) * 100
+      : 0;
+  const totalLotCapacityQtl = lots.length * 200;
+  const lotUtilizationPct =
+    totalLotCapacityQtl > 0
+      ? Math.min(
+          (lots.reduce((sum, item) => sum + Number(item.currentQtyQtl ?? 0), 0) / totalLotCapacityQtl) * 100,
+          100
+        )
+      : 0;
+  const averageNetPerReceipt =
+    receipts.length > 0 ? dashboardMetrics.netReceived / receipts.length : 0;
+  const averageWeightPerBagKg =
+    dashboardMetrics.intakeBags > 0
+      ? (dashboardMetrics.netReceived * 100) / dashboardMetrics.intakeBags
+      : 0;
+  const draftVoucherCount = financialVouchers.filter((item) => item.status === "DRAFT").length;
+  const paidVoucherCount = financialVouchers.filter((item) =>
+    ["PAID", "OVERPAID"].includes(item.status)
+  ).length;
+  const unpaidVoucherCount = financialVouchers.filter(
+    (item) => !["PAID", "OVERPAID"].includes(item.status)
+  ).length;
+  const voucherBalanceOutstanding = financialVouchers.reduce(
+    (sum, item) => sum + Number(item.balanceAmount ?? 0),
+    0
+  );
+  const todayReceipts = receipts.filter((item) => item.receiptDate === todayIso);
+  const todayReceiptBags = todayReceipts.reduce(
+    (sum, receipt) =>
+      sum + receipt.lines.reduce((lineSum, line) => lineSum + Number(line.noOfBags ?? 0), 0),
+    0
+  );
+  const todayReceiptNet = todayReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
   const visibleNavSections = navSections
     .map((section) => ({
       ...section,
@@ -890,6 +955,39 @@ export default function HomePage() {
       [sectionKey]: true
     }));
     setActiveView(view);
+  }
+  function toggleDashboardSection(sectionKey: keyof typeof dashboardExpandedSections) {
+    setDashboardExpandedSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey]
+    }));
+  }
+  function openRegistrationFromDashboard(registrationId: string) {
+    setDepositViewRegistrationId(registrationId);
+  }
+  function openReceiptFromDashboard(receiptId: string) {
+    const receipt = receipts.find((item) => item.id === receiptId);
+    if (!receipt) {
+      return;
+    }
+    setDepositViewRegistrationId(receipt.cropRegistrationId);
+  }
+  function openVoucherFromDashboard(voucherId: string) {
+    const voucher = financialVouchers.find((item) => item.id === voucherId);
+    if (!voucher) {
+      return;
+    }
+    openPaymentLedger(voucher);
+  }
+  function openStackHotspotFromDashboard(godownName: string, stackNo: string) {
+    const target = openDiscrepancies.find(
+      (item) => item.godownName === godownName && item.stackNo === stackNo
+    );
+    if (!target) {
+      return;
+    }
+    setSelectedDiscrepancyId(target.id);
+    setActiveView("discrepancies");
   }
   const openDiscrepancyKeySet = new Set(
     openDiscrepancies.map((item) => `${item.cropRegistrationCode}::${item.stackNo}`)
@@ -996,14 +1094,15 @@ export default function HomePage() {
   const voucherRows = registrations
     .filter((item) => item.status !== "BLOCKED")
     .filter((item) => {
-      const query = voucherSearch.trim().toLowerCase();
+      const query = voucherGenerationSearch.trim().toLowerCase();
       const matchesSearch =
         !query ||
         item.cropRegistrationCode.toLowerCase().includes(query) ||
         item.farmerName.toLowerCase().includes(query) ||
         item.village.toLowerCase().includes(query) ||
         item.district.toLowerCase().includes(query);
-      const matchesDistrict = !voucherDistrictFilter || item.district === voucherDistrictFilter;
+      const matchesDistrict =
+        !voucherGenerationDistrictFilter || item.district === voucherGenerationDistrictFilter;
       return matchesSearch && matchesDistrict;
     })
     .slice()
@@ -1015,7 +1114,7 @@ export default function HomePage() {
   ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
   const filteredVoucherRegisterRows = financialVouchers
     .filter((voucher) => {
-      const query = voucherSearch.trim().toLowerCase();
+      const query = voucherRegisterSearch.trim().toLowerCase();
       const matchesSearch =
         !query ||
         voucher.voucherNo.toLowerCase().includes(query) ||
@@ -1023,7 +1122,8 @@ export default function HomePage() {
         voucher.farmerName.toLowerCase().includes(query) ||
         voucher.village.toLowerCase().includes(query) ||
         voucher.district.toLowerCase().includes(query);
-      const matchesDistrict = !voucherDistrictFilter || voucher.district === voucherDistrictFilter;
+      const matchesDistrict =
+        !voucherRegisterDistrictFilter || voucher.district === voucherRegisterDistrictFilter;
       return matchesSearch && matchesDistrict;
     })
     .slice()
@@ -1049,6 +1149,85 @@ export default function HomePage() {
       (registrationBagMap.get(receipt.cropRegistrationId) ?? 0) + totalBags
     );
   });
+  const districtDashboardRows = Array.from(
+    registrations.reduce(
+      (map, registration) => {
+        const key = registration.district || "UNSPECIFIED";
+        const current = map.get(key) ?? {
+          district: key,
+          registrations: 0,
+          expectedYield: 0,
+          receivedNet: 0,
+          pending: 0,
+          bags: 0,
+          discrepancyCases: 0
+        };
+        current.registrations += 1;
+        current.expectedYield += Number(registration.expectedYieldQtl ?? 0);
+        current.receivedNet += Number(registration.totalReceivedQtl ?? 0);
+        current.pending += Number(registration.balanceQtl ?? 0);
+        current.bags += registrationBagMap.get(registration.id) ?? 0;
+        current.discrepancyCases += openDiscrepancies.filter(
+          (item) => item.cropRegistrationId === registration.id
+        ).length;
+        map.set(key, current);
+        return map;
+      },
+      new Map<
+        string,
+        {
+          district: string;
+          registrations: number;
+          expectedYield: number;
+          receivedNet: number;
+          pending: number;
+          bags: number;
+          discrepancyCases: number;
+        }
+      >()
+    ).values()
+  )
+    .map((item) => ({
+      ...item,
+      coveragePct: item.expectedYield > 0 ? (item.receivedNet / item.expectedYield) * 100 : 0
+    }))
+    .sort((left, right) => right.receivedNet - left.receivedNet);
+  const pendingRegistrationRows = registrations
+    .filter((item) => item.balanceQtl > 0)
+    .slice()
+    .sort((left, right) => right.balanceQtl - left.balanceQtl);
+  const stackHotspotRows = Array.from(
+    openDiscrepancies.reduce(
+      (map, item) => {
+        const key = `${item.godownName}::${item.stackNo}`;
+        const current = map.get(key) ?? {
+          key,
+          godownName: item.godownName,
+          stackNo: item.stackNo,
+          cases: 0,
+          bags: 0,
+          qtyQtl: 0
+        };
+        current.cases += 1;
+        current.bags += Number(item.estimatedExcessBags ?? 0);
+        current.qtyQtl += Number(item.excessQtyQtl ?? 0);
+        map.set(key, current);
+        return map;
+      },
+      new Map<
+        string,
+        {
+          key: string;
+          godownName: string;
+          stackNo: string;
+          cases: number;
+          bags: number;
+          qtyQtl: number;
+        }
+      >()
+    ).values()
+  )
+    .sort((left, right) => right.qtyQtl - left.qtyQtl);
   const registrationReceiptLines = registrationReceipts.flatMap((receipt) =>
     receipt.lines.map((line) => ({
       receiptNo: receipt.receiptNo,
@@ -1107,21 +1286,52 @@ export default function HomePage() {
         }, {})
       )
     : [];
+  const recentReceipts = receipts
+    .slice()
+    .sort((left, right) =>
+      `${right.receiptDate}-${right.receiptNo}`.localeCompare(`${left.receiptDate}-${left.receiptNo}`)
+    );
+  const recentVoucherRows = financialVouchers
+    .slice()
+    .sort((left, right) =>
+      `${right.voucherDate}-${right.voucherNo}`.localeCompare(`${left.voucherDate}-${left.voucherNo}`)
+    );
+  const visibleRecentReceiptRows = dashboardExpandedSections.recentReceipts
+    ? recentReceipts
+    : recentReceipts.slice(0, 5);
+  const visibleRecentVoucherRows = dashboardExpandedSections.recentVouchers
+    ? recentVoucherRows
+    : recentVoucherRows.slice(0, 5);
+  const topGodownStock = godowns
+    .map((godown) => {
+      const godownLots = lots.filter((lot) => lot.godownId === godown.id);
+      const qtyQtl = godownLots.reduce((sum, lot) => sum + Number(lot.currentQtyQtl ?? 0), 0);
+      const capacityQtl = godownLots.length * 200;
+      return {
+        name: godown.name,
+        qtyQtl,
+        lots: godownLots.length,
+        fullLots: godownLots.filter((lot) => lot.status === "FULL").length,
+        utilizationPct: capacityQtl > 0 ? (qtyQtl / capacityQtl) * 100 : 0
+      };
+    })
+    .sort((left, right) => right.qtyQtl - left.qtyQtl);
   const topDiscrepancies = openDiscrepancies
     .slice()
     .sort((left, right) => right.excessQtyQtl - left.excessQtyQtl)
     .slice(0, 5);
-  const recentReceipts = receipts.slice(0, 5);
-  const topGodownStock = godowns
-    .map((godown) => ({
-      name: godown.name,
-      qtyQtl: lots
-        .filter((lot) => lot.godownId === godown.id)
-        .reduce((sum, lot) => sum + Number(lot.currentQtyQtl ?? 0), 0),
-      lots: lots.filter((lot) => lot.godownId === godown.id).length
-    }))
-    .sort((left, right) => right.qtyQtl - left.qtyQtl)
-    .slice(0, 5);
+  const visibleDistrictDashboardRows = dashboardExpandedSections.districts
+    ? districtDashboardRows
+    : districtDashboardRows.slice(0, 5);
+  const visibleGodownStockRows = dashboardExpandedSections.godowns
+    ? topGodownStock
+    : topGodownStock.slice(0, 5);
+  const visiblePendingRegistrationRows = dashboardExpandedSections.pendingRegistrations
+    ? pendingRegistrationRows
+    : pendingRegistrationRows.slice(0, 5);
+  const visibleStackHotspotRows = dashboardExpandedSections.stackHotspots
+    ? stackHotspotRows
+    : stackHotspotRows.slice(0, 5);
   const shortSnapshot = [
     `${receipts.length} receipts`,
     `${dashboardMetrics.intakeBags} bags`,
@@ -1497,6 +1707,13 @@ export default function HomePage() {
 
   function deleteReceipt(receiptRefToDelete: string, receiptNoToDelete: string) {
     if (!requirePermission("canDelete", "Only Admin can delete intake entries.")) {
+      return;
+    }
+    const confirmed = confirmDestructiveAction({
+      itemLabel: `Receipt No.: ${receiptNoToDelete}`
+    });
+    if (!confirmed) {
+      notifyUser("Delete cancelled. No receipt was deleted.", false);
       return;
     }
     void (async () => {
@@ -2806,6 +3023,14 @@ export default function HomePage() {
       return;
     }
 
+    const confirmed = confirmDestructiveAction({
+      itemLabel: `Voucher No.: ${voucher.voucherNo}\nFarmer: ${voucher.farmerName}`
+    });
+    if (!confirmed) {
+      notifyUser("Delete cancelled. No financial voucher was deleted.", false);
+      return;
+    }
+
     let overridePassword = adminPassword;
     if (isVoucherLockedStatus(voucher.status) && !overridePassword) {
       const prompted = promptAdminPassword(voucher.voucherNo, "Deleting");
@@ -3177,7 +3402,7 @@ export default function HomePage() {
       renderVoucherPdfPage(doc, voucher, index > 0);
     });
 
-    const districtLabel = voucherDistrictFilter || "ALL_DISTRICTS";
+    const districtLabel = voucherRegisterDistrictFilter || "ALL_DISTRICTS";
     doc.save(`financial_vouchers_${districtLabel.replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`);
     notifyUser(`${vouchers.length} voucher(s) downloaded in one PDF.`);
   }
@@ -3607,7 +3832,102 @@ export default function HomePage() {
 
           {activeView === "dashboard" && (
             <div className="contentStack">
-              <section className="panel metricsPanel">
+              <section className="panel dashboardHero">
+                <div>
+                  <p className="eyebrow">Operational Control</p>
+                  <h3>Seed Intake Command Dashboard</h3>
+                  <p className="dashboardIntro">
+                    Track intake progress, stock pressure, payment status, and discrepancy exposure from one
+                    screen. Use this view as the daily working dashboard for officers and management.
+                  </p>
+                </div>
+                <div className="dashboardHeroStats">
+                  <div className="dashboardHeroCard">
+                    <span>Today Intake</span>
+                    <strong>{formatNumber(todayReceiptNet)} QTL</strong>
+                    <small>{todayReceipts.length} receipts | {todayReceiptBags} bags</small>
+                  </div>
+                  <div className="dashboardHeroCard">
+                    <span>Intake Coverage</span>
+                    <strong>{formatNumber(intakeCoveragePct)}%</strong>
+                    <small>
+                      {formatNumber(dashboardMetrics.netReceived)} of {formatNumber(dashboardMetrics.expectedYield)} QTL
+                    </small>
+                  </div>
+                  <div className="dashboardHeroCard">
+                    <span>Pending Payable</span>
+                    <strong>{formatNumber(voucherBalanceOutstanding)} INR</strong>
+                    <small>{draftVoucherCount} draft | {paidVoucherCount} paid/overpaid</small>
+                  </div>
+                  <div className="dashboardHeroCard">
+                    <span>Discrepancy Exposure</span>
+                    <strong>{formatNumber(discrepancyExposurePct)}%</strong>
+                    <small>{dashboardMetrics.discrepancyCount} open cases</small>
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel dashboardProgressGrid">
+                <article className="dashboardProgressCard">
+                  <div className="panelHeader">
+                    <h3>Intake Progress</h3>
+                    <span>{formatNumber(intakeCoveragePct)}% complete</span>
+                  </div>
+                  <div className="dashboardProgress">
+                    <div
+                      className="dashboardProgressBar"
+                      style={{ width: `${Math.max(Math.min(intakeCoveragePct, 100), 0)}%` }}
+                    />
+                  </div>
+                  <div className="dashboardProgressMeta">
+                    <span>Received {formatNumber(dashboardMetrics.netReceived)} QTL</span>
+                    <span>Pending {formatNumber(dashboardMetrics.pending)} QTL</span>
+                  </div>
+                </article>
+                <article className="dashboardProgressCard">
+                  <div className="panelHeader">
+                    <h3>Lot Utilization</h3>
+                    <span>{formatNumber(lotUtilizationPct)}% utilized</span>
+                  </div>
+                  <div className="dashboardProgress">
+                    <div
+                      className="dashboardProgressBar dashboardProgressBarWarning"
+                      style={{ width: `${Math.max(Math.min(lotUtilizationPct, 100), 0)}%` }}
+                    />
+                  </div>
+                  <div className="dashboardProgressMeta">
+                    <span>{dashboardMetrics.totalLots} lots in use</span>
+                    <span>{dashboardMetrics.fullLots} full lots</span>
+                  </div>
+                </article>
+                <article className="dashboardProgressCard">
+                  <div className="panelHeader">
+                    <h3>Voucher Settlement</h3>
+                    <span>{financialVouchers.length} vouchers</span>
+                  </div>
+                  <div className="dashboardProgress">
+                    <div
+                      className="dashboardProgressBar dashboardProgressBarFinance"
+                      style={{
+                        width: `${
+                          financialVouchers.length > 0
+                            ? Math.max(
+                                Math.min((paidVoucherCount / financialVouchers.length) * 100, 100),
+                                0
+                              )
+                            : 0
+                        }%`
+                      }}
+                    />
+                  </div>
+                  <div className="dashboardProgressMeta">
+                    <span>{draftVoucherCount} draft / unpaid working vouchers</span>
+                    <span>{paidVoucherCount} paid or overpaid</span>
+                  </div>
+                </article>
+              </section>
+
+              <section className="panel metricsPanel dashboardMetricsPanel">
                 <div className="metricBox">
                   <span>Expected Yield</span>
                   <strong>{formatNumber(dashboardMetrics.expectedYield)} QTL</strong>
@@ -3621,20 +3941,24 @@ export default function HomePage() {
                   <strong>{formatNumber(dashboardMetrics.netReceived)} QTL</strong>
                 </div>
                 <div className="metricBox">
-                  <span>Pending</span>
+                  <span>Pending Balance</span>
                   <strong>{formatNumber(dashboardMetrics.pending)} QTL</strong>
-                </div>
-                <div className="metricBox">
-                  <span>Open Lots</span>
-                  <strong>{dashboardMetrics.openLots}</strong>
                 </div>
                 <div className="metricBox">
                   <span>Total Intake Bags</span>
                   <strong>{dashboardMetrics.intakeBags}</strong>
                 </div>
                 <div className="metricBox">
-                  <span>Total Lots Created</span>
-                  <strong>{dashboardMetrics.totalLots}</strong>
+                  <span>Avg. Net / Receipt</span>
+                  <strong>{formatNumber(averageNetPerReceipt)} QTL</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Avg. Bag Weight</span>
+                  <strong>{formatNumber(averageWeightPerBagKg)} KG</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Open Lots</span>
+                  <strong>{dashboardMetrics.openLots}</strong>
                 </div>
                 <div className="metricBox">
                   <span>Full Lots</span>
@@ -3644,100 +3968,431 @@ export default function HomePage() {
                   <span>Active Registrations</span>
                   <strong>{dashboardMetrics.activeRegistrations}</strong>
                 </div>
+                <div className="metricBox">
+                  <span>Open Discrepancy Bags</span>
+                  <strong>{dashboardMetrics.discrepancyBags}</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Shifted Qty</span>
+                  <strong>{formatNumber(dashboardMetrics.shiftedQty)} QTL</strong>
+                </div>
               </section>
 
               <section className="panel twoColumn">
                 <article className="infoCard">
-                  <h3>Stock Snapshot</h3>
-                  <ul>
-                    <li>{receipts.length} intake receipts saved in MongoDB</li>
-                    <li>{formatNumber(dashboardMetrics.grossReceived)} QTL total gross intake captured</li>
-                    <li>{formatNumber(dashboardMetrics.netReceived)} QTL total net intake captured</li>
-                    <li>{godowns.length} godowns and {stacks.length} stacks available for intake</li>
-                    <li>{dashboardMetrics.shiftedBags} bags shifted through {dashboardMetrics.shiftedCases} discrepancy shift entries</li>
-                    <li>{formatNumber(dashboardMetrics.shiftedQty)} QTL already moved out through discrepancy handling</li>
-                  </ul>
+                  <div className="panelHeader">
+                    <h3>Quick Actions</h3>
+                    <span>Open work modules directly</span>
+                  </div>
+                  <div className="dashboardActionGrid">
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("intake")}>
+                      New Intake Entry
+                    </button>
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("registrations")}>
+                      Registration Master
+                    </button>
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("lots")}>
+                      Lot Tracking
+                    </button>
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("finance")}>
+                      Voucher Register
+                    </button>
+                    {features.discrepancyWorkflow ? (
+                      <button
+                        className="secondaryButton"
+                        type="button"
+                        onClick={() => setActiveView("discrepancies")}
+                      >
+                        Discrepancy Register
+                      </button>
+                    ) : null}
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("reports")}>
+                      Reports
+                    </button>
+                  </div>
                 </article>
                 <article className="infoCard">
-                  <h3>Discrepancy Snapshot</h3>
+                  <div className="panelHeader">
+                    <h3>Watchlist</h3>
+                    <span>Immediate points needing attention</span>
+                  </div>
                   <ul>
-                    <li>{dashboardMetrics.discrepancyCount} open discrepancy cases currently under review</li>
-                    <li>{dashboardMetrics.discrepancyBags} bags still marked under discrepancy</li>
-                    <li>{formatNumber(dashboardMetrics.discrepancyQty)} QTL excess quantity still pending shift or resolution</li>
-                    <li>{new Set(openDiscrepancies.map((item) => `${item.godownName}-${item.stackNo}`)).size} stack groups are presently affected</li>
+                    <li>{dashboardMetrics.discrepancyCount} discrepancy cases remain open across {stackHotspotRows.length} stack hotspot groups</li>
+                    <li>{pendingRegistrationRows.length} major registrations still have substantial balance pending intake</li>
+                    <li>{unpaidVoucherCount} vouchers are not fully settled and outstanding balance is {formatNumber(voucherBalanceOutstanding)} INR</li>
+                    <li>{dashboardMetrics.shiftedCases} discrepancy shift entries have already moved {formatNumber(dashboardMetrics.shiftedQty)} QTL</li>
+                    <li>{features.discrepancyWorkflow ? "Over-intake is being tracked through discrepancy workflow." : "Over-intake is fully blocked at intake save level."}</li>
                   </ul>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.districts ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>District Performance</h3>
+                      <p>Top districts by received quantity</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("districts")}
+                      >
+                        {dashboardExpandedSections.districts ? "Collapse" : "View Full"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>District</th>
+                          <th>Regs.</th>
+                          <th>Received</th>
+                          <th>Coverage</th>
+                          <th>Pending</th>
+                          <th>Discrepancies</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleDistrictDashboardRows.map((item) => (
+                          <tr key={item.district}>
+                            <td>{item.district}</td>
+                            <td>{item.registrations}</td>
+                            <td>{formatNumber(item.receivedNet)} QTL</td>
+                            <td>{formatNumber(item.coveragePct)}%</td>
+                            <td>{formatNumber(item.pending)} QTL</td>
+                            <td>{item.discrepancyCases}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.godowns ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Godown Utilization</h3>
+                      <p>Storage position by godown</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("godowns")}
+                      >
+                        {dashboardExpandedSections.godowns ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("lots")}>
+                        Open Lots
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Godown</th>
+                          <th>Qty</th>
+                          <th>Lots</th>
+                          <th>Full Lots</th>
+                          <th>Utilization</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleGodownStockRows.map((item) => (
+                          <tr key={item.name}>
+                            <td>{item.name}</td>
+                            <td>{formatNumber(item.qtyQtl)} QTL</td>
+                            <td>{item.lots}</td>
+                            <td>{item.fullLots}</td>
+                            <td>{formatNumber(item.utilizationPct)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.pendingRegistrations ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Pending Registrations</h3>
+                      <p>Highest remaining balance to intake</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("pendingRegistrations")}
+                      >
+                        {dashboardExpandedSections.pendingRegistrations ? "Collapse" : "View Full"}
+                      </button>
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => setActiveView("registrations")}
+                      >
+                        Open Register
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Reg. Code</th>
+                          <th>Farmer</th>
+                          <th>District</th>
+                          <th>Received</th>
+                          <th>Pending</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visiblePendingRegistrationRows.map((item) => (
+                          <tr
+                            key={item.id}
+                            className="clickableRow"
+                            onClick={() => openRegistrationFromDashboard(item.id)}
+                          >
+                            <td>{item.cropRegistrationCode}</td>
+                            <td>{item.farmerName}</td>
+                            <td>{item.district}</td>
+                            <td>{formatNumber(item.totalReceivedQtl)} QTL</td>
+                            <td>{formatNumber(item.balanceQtl)} QTL</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.stackHotspots ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Stack Hotspots</h3>
+                      <p>Most affected discrepancy stacks</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("stackHotspots")}
+                      >
+                        {dashboardExpandedSections.stackHotspots ? "Collapse" : "View Full"}
+                      </button>
+                      {features.discrepancyWorkflow ? (
+                        <button
+                          className="smallButton"
+                          type="button"
+                          onClick={() => setActiveView("discrepancies")}
+                        >
+                          Open Register
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Godown</th>
+                          <th>Stack</th>
+                          <th>Cases</th>
+                          <th>Bags</th>
+                          <th>Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleStackHotspotRows.length ? (
+                          visibleStackHotspotRows.map((item) => (
+                            <tr
+                              key={item.key}
+                              className="clickableRow"
+                              onClick={() =>
+                                openStackHotspotFromDashboard(item.godownName, item.stackNo)
+                              }
+                            >
+                              <td>{item.godownName}</td>
+                              <td>{item.stackNo}</td>
+                              <td>{item.cases}</td>
+                              <td>{item.bags}</td>
+                              <td>{formatNumber(item.qtyQtl)} QTL</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="emptyStateCell">
+                              No discrepancy hotspot currently open.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.recentReceipts ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Recent Receipts</h3>
+                      <p>Latest intake activity</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("recentReceipts")}
+                      >
+                        {dashboardExpandedSections.recentReceipts ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("intakeEdit")}>
+                        Open Receipt Edit
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Receipt</th>
+                          <th>Date</th>
+                          <th>Reg. Code</th>
+                          <th>Bags</th>
+                          <th>Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleRecentReceiptRows.map((receipt) => (
+                          <tr
+                            key={receipt.id}
+                            className="clickableRow"
+                            onClick={() => openReceiptFromDashboard(receipt.id)}
+                          >
+                            <td>{receipt.receiptNo}</td>
+                            <td>{receipt.receiptDate}</td>
+                            <td>{receipt.cropRegistrationCode}</td>
+                            <td>
+                              {receipt.lines.reduce((sum, line) => sum + Number(line.noOfBags ?? 0), 0)}
+                            </td>
+                            <td>{formatNumber(sumReceiptNetQty(receipt))} QTL</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.recentVouchers ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Recent Vouchers</h3>
+                      <p>Latest farmer payment records</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("recentVouchers")}
+                      >
+                        {dashboardExpandedSections.recentVouchers ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("finance")}>
+                        Open Finance
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Voucher</th>
+                          <th>Date</th>
+                          <th>Farmer</th>
+                          <th>Status</th>
+                          <th>Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleRecentVoucherRows.length ? (
+                          visibleRecentVoucherRows.map((voucher) => (
+                            <tr
+                              key={voucher.id}
+                              className="clickableRow"
+                              onClick={() => openVoucherFromDashboard(voucher.id)}
+                            >
+                              <td>{voucher.voucherNo}</td>
+                              <td>{voucher.voucherDate}</td>
+                              <td>{voucher.farmerName}</td>
+                              <td>
+                                <span className={`status ${voucher.status.toLowerCase()}`}>{voucher.status}</span>
+                              </td>
+                              <td>{formatNumber(voucher.balanceAmount)} INR</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="emptyStateCell">
+                              No financial vouchers generated yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </article>
               </section>
 
               <section className="panel twoColumn">
                 <article className="infoCard">
-                  <h3>Recent Receipts</h3>
+                  <div className="panelHeader">
+                    <h3>Control Notes</h3>
+                    <span>System control assumptions</span>
+                  </div>
                   <ul>
-                    {recentReceipts.map((receipt) => (
-                      <li key={receipt.id}>
-                        {receipt.receiptNo} | {receipt.cropRegistrationCode} |{" "}
-                        {formatNumber(receipt.lines.reduce((sum, line) => sum + line.qtyQtl, 0))} QTL
-                      </li>
-                    ))}
+                    <li>{features.discrepancyWorkflow ? "Over-intake is saved and routed into discrepancy control." : "Over-intake is hard blocked during intake save."}</li>
+                    <li>Lot cap remains fixed at 200 QTL per lot for continuity and reporting control.</li>
+                    <li>Stack-wise segregation remains active for traceability and stack card reporting.</li>
+                    <li>Certification-facing stock should exclude unresolved discrepancy quantity from clean stock view.</li>
                   </ul>
                 </article>
                 <article className="infoCard">
-                  <h3>Godown Snapshot</h3>
+                  <div className="panelHeader">
+                    <h3>System Coverage</h3>
+                    <span>Modules contributing to dashboard data</span>
+                  </div>
                   <ul>
-                    {topGodownStock.map((item) => (
-                      <li key={item.name}>
-                        {item.name} | {formatNumber(item.qtyQtl)} QTL | {item.lots} lots
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              </section>
-
-              <section className="panel twoColumn">
-                <article className="infoCard">
-                  <h3>Top Discrepancies</h3>
-                  <ul>
-                    {topDiscrepancies.length > 0 ? (
-                      topDiscrepancies.map((item) => (
-                        <li key={item.id}>
-                          {item.cropRegistrationCode} | Stack {item.stackNo} | Excess{" "}
-                          {formatNumber(item.excessQtyQtl)} QTL
-                        </li>
-                      ))
-                    ) : (
-                      <li>No open discrepancy cases</li>
-                    )}
-                  </ul>
-                </article>
-                <article className="infoCard">
-                  <h3>Short Snapshot</h3>
-                  <ul>
-                    <li>Gross intake is {formatNumber(dashboardMetrics.grossReceived)} QTL and net intake is {formatNumber(dashboardMetrics.netReceived)} QTL</li>
-                    <li>Net intake is mapped against expected yield of {formatNumber(dashboardMetrics.expectedYield)} QTL</li>
-                    <li>Pending balance is {formatNumber(dashboardMetrics.pending)} QTL</li>
-                    <li>{dashboardMetrics.discrepancyBags} bags are pending discrepancy resolution</li>
-                    <li>{dashboardMetrics.shiftedBags} bags have already been shifted out of marked stacks</li>
-                  </ul>
-                </article>
-              </section>
-
-              <section className="panel twoColumn">
-                <article className="infoCard">
-                  <h3>Module Coverage</h3>
-                  <ul>
-                    <li>Farmer master import with pagination, sorting, and Excel export</li>
-                    <li>Registration master with launch-to-intake workflow</li>
+                    <li>Farmer master import and registration launch workflow</li>
                     <li>Intake entry, edit, delete, and auto lot creation</li>
-                    <li>Discrepancy register with shift entry and shift history</li>
-                  </ul>
-                </article>
-                <article className="infoCard">
-                  <h3>Current Control Mode</h3>
-                  <ul>
-                    <li>{features.discrepancyWorkflow ? "Over-intake is saved and flagged into discrepancy workflow" : "Over-intake is hard blocked at save time"}</li>
-                    <li>Lot cap remains fixed at 200 QTL</li>
-                    <li>Stack-wise segregation remains active for lot continuity</li>
-                    <li>Certification-facing stock should exclude unresolved discrepancy quantity</li>
+                    <li>Discrepancy register with shift history and hotspot traceability</li>
+                    <li>Financial vouchers, payment ledger, reports, and stack/lot visibility</li>
                   </ul>
                 </article>
               </section>
@@ -4570,12 +5225,12 @@ export default function HomePage() {
                 <div className="filtersBar">
                   <input
                     placeholder="Search by reg. code, farmer, village, or district"
-                    value={voucherSearch}
-                    onChange={(event) => setVoucherSearch(event.target.value)}
+                    value={voucherGenerationSearch}
+                    onChange={(event) => setVoucherGenerationSearch(event.target.value)}
                   />
                   <select
-                    value={voucherDistrictFilter}
-                    onChange={(event) => setVoucherDistrictFilter(event.target.value)}
+                    value={voucherGenerationDistrictFilter}
+                    onChange={(event) => setVoucherGenerationDistrictFilter(event.target.value)}
                   >
                     <option value="">All Districts</option>
                     {voucherDistrictOptions.map((item) => (
@@ -4601,52 +5256,60 @@ export default function HomePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {voucherRows.map((item, index) => {
-                        const discrepancyInfo =
-                          registrationDiscrepancyMap.get(item.id) ?? { qtyQtl: 0, bags: 0 };
-                        const totalBags = registrationBagMap.get(item.id) ?? 0;
-                        const existingVoucher = voucherByRegistrationId.get(item.id);
-                        return (
-                          <tr key={item.id}>
-                            <td>{index + 1}</td>
-                            <td>{item.cropRegistrationCode}</td>
-                            <td>{item.farmerName}</td>
-                            <td>{item.village}</td>
-                            <td>{item.district}</td>
-                            <td>{totalBags}</td>
-                            <td>{formatNumber(item.totalReceivedQtl)} QTL</td>
-                            <td>{formatNumber(discrepancyInfo.qtyQtl)} QTL</td>
-                            <td>
-                              {existingVoucher ? (
-                                <div className="inlineActionRow">
+                      {voucherRows.length ? (
+                        voucherRows.map((item, index) => {
+                          const discrepancyInfo =
+                            registrationDiscrepancyMap.get(item.id) ?? { qtyQtl: 0, bags: 0 };
+                          const totalBags = registrationBagMap.get(item.id) ?? 0;
+                          const existingVoucher = voucherByRegistrationId.get(item.id);
+                          return (
+                            <tr key={item.id}>
+                              <td>{index + 1}</td>
+                              <td>{item.cropRegistrationCode}</td>
+                              <td>{item.farmerName}</td>
+                              <td>{item.village}</td>
+                              <td>{item.district}</td>
+                              <td>{totalBags}</td>
+                              <td>{formatNumber(item.totalReceivedQtl)} QTL</td>
+                              <td>{formatNumber(discrepancyInfo.qtyQtl)} QTL</td>
+                              <td>
+                                {existingVoucher ? (
+                                  <div className="inlineActionRow">
+                                    <button
+                                      className="smallButton"
+                                      type="button"
+                                      onClick={() => openVoucherModal(item.id)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="smallButton"
+                                      type="button"
+                                      onClick={() => downloadVoucherPdf(existingVoucher)}
+                                    >
+                                      Download PDF
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
                                     className="smallButton"
                                     type="button"
                                     onClick={() => openVoucherModal(item.id)}
                                   >
-                                    Edit
+                                    Generate Voucher
                                   </button>
-                                  <button
-                                    className="smallButton"
-                                    type="button"
-                                    onClick={() => downloadVoucherPdf(existingVoucher)}
-                                  >
-                                    Download PDF
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  className="smallButton"
-                                  type="button"
-                                  onClick={() => openVoucherModal(item.id)}
-                                >
-                                  Generate Voucher
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={9} className="emptyStateCell">
+                            No registrations match the current financial-voucher filters.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -4660,12 +5323,12 @@ export default function HomePage() {
                 <div className="filtersBar">
                   <input
                     placeholder="Search voucher no., reg. code, farmer, village, or district"
-                    value={voucherSearch}
-                    onChange={(event) => setVoucherSearch(event.target.value)}
+                    value={voucherRegisterSearch}
+                    onChange={(event) => setVoucherRegisterSearch(event.target.value)}
                   />
                   <select
-                    value={voucherDistrictFilter}
-                    onChange={(event) => setVoucherDistrictFilter(event.target.value)}
+                    value={voucherRegisterDistrictFilter}
+                    onChange={(event) => setVoucherRegisterDistrictFilter(event.target.value)}
                   >
                     <option value="">All Districts</option>
                     {voucherDistrictOptions.map((item) => (
