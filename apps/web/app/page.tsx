@@ -15,6 +15,8 @@ import type {
   IntakeDiscrepancy,
   IntakeReceipt,
   IntakeReceiptLine,
+  Organizer,
+  OrganizerPayment,
   RegistrationRecord,
   RolePermissions,
   Stack
@@ -35,6 +37,7 @@ type ViewKey =
   | "intakeEdit"
   | "reports"
   | "finance"
+  | "commission"
   | "slips"
   | "lots"
   | "discrepancies"
@@ -65,6 +68,24 @@ type RegistrationSortKey =
   | "totalReceivedQtl"
   | "balanceQtl"
   | "status";
+
+type OrganizerCommissionRow = {
+  organizer: Organizer;
+  linkedRegistrations: RegistrationRecord[];
+  farmerCount: number;
+  totalIntakeQtl: number;
+  ratePerQtl: number;
+  grossCommissionAmount: number;
+  deductionAmount: number;
+  netPayableAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  paymentCount: number;
+};
+
+type OrganizerDashboardRow = OrganizerCommissionRow & {
+  coveragePct: number;
+};
 
   const navSections: {
     key: SidebarSectionKey;
@@ -105,7 +126,10 @@ type RegistrationSortKey =
     {
       key: "financeOps",
       label: "Finance",
-      items: [{ key: "finance", label: "Financial Voucher" }]
+      items: [
+        { key: "finance", label: "Financial Voucher" },
+        { key: "commission", label: "Organizer Commission" }
+      ]
     },
     {
       key: "reporting",
@@ -163,6 +187,7 @@ type ReportType =
   | "OVERALL_INTAKE"
   | "SUMMARY"
   | "DAILY_INTAKE_REGISTER"
+  | "CUSTOM_DATE_PAYMENT_REGISTER"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
   | "STACK_WISE_STOCK_POSITION"
@@ -180,6 +205,19 @@ type ReportPreview = {
   totals: Record<string, string | number>;
   generatedAt: string;
   fileName: string;
+};
+
+type PaymentRegisterRow = {
+  date: string;
+  voucherNo: string;
+  farmerName: string;
+  regCode: string;
+  village: string;
+  district: string;
+  status: string;
+  transactionNo: string;
+  mode: string;
+  amount: number;
 };
 
 type SlipPreview = {
@@ -206,6 +244,7 @@ type CoreBootstrapPayload = {
   registrations: RegistrationRecord[];
   godowns: Godown[];
   stacks: Stack[];
+  organizers: Organizer[];
   features?: { discrepancyWorkflow?: boolean };
 };
 
@@ -214,6 +253,7 @@ type OperationalBootstrapPayload = {
   discrepancies: IntakeDiscrepancy[];
   discrepancyShifts: DiscrepancyShift[];
   financialVouchers: FinancialVoucher[];
+  organizerPayments: OrganizerPayment[];
   receipts: IntakeReceipt[];
   features?: { discrepancyWorkflow?: boolean };
 };
@@ -227,6 +267,7 @@ const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "OVERALL_INTAKE", label: "Overall Intake" },
   { value: "SUMMARY", label: "Summary" },
   { value: "DAILY_INTAKE_REGISTER", label: "Daily Intake Register" },
+  { value: "CUSTOM_DATE_PAYMENT_REGISTER", label: "Custom Date Payment Register" },
   { value: "REGISTRATION_PENDING_RECEIVED", label: "Registration Pending vs Received" },
   { value: "LOT_WISE_STOCK_LEDGER", label: "Lot-wise Stock Ledger" },
   { value: "STACK_WISE_STOCK_POSITION", label: "Stack-wise Stock Position" },
@@ -466,10 +507,12 @@ export default function HomePage() {
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>([]);
   const [godowns, setGodowns] = useState<Godown[]>(defaultGodowns);
   const [stacks, setStacks] = useState<Stack[]>(defaultStacks);
+  const [organizers, setOrganizers] = useState<Organizer[]>([]);
   const [lots, setLots] = useState<CertificationLot[]>([]);
   const [discrepancies, setDiscrepancies] = useState<IntakeDiscrepancy[]>([]);
   const [discrepancyShifts, setDiscrepancyShifts] = useState<DiscrepancyShift[]>([]);
   const [financialVouchers, setFinancialVouchers] = useState<FinancialVoucher[]>([]);
+  const [organizerPayments, setOrganizerPayments] = useState<OrganizerPayment[]>([]);
   const [receipts, setReceipts] = useState<IntakeReceipt[]>([]);
   const [features, setFeatures] = useState({ discrepancyWorkflow: false });
   const [selectedRegistrationId, setSelectedRegistrationId] = useState("");
@@ -492,6 +535,8 @@ export default function HomePage() {
   const [reportStackNo, setReportStackNo] = useState("");
   const [reportRegistrationCode, setReportRegistrationCode] = useState("");
   const [reportFarmerName, setReportFarmerName] = useState("");
+  const [reportVillage, setReportVillage] = useState("");
+  const [reportPaymentStatus, setReportPaymentStatus] = useState("");
   const [reportMode, setReportMode] = useState<ReportMode>("ALL");
   const [reportPreview, setReportPreview] = useState<ReportPreview | null>(null);
   const [slipSearch, setSlipSearch] = useState("");
@@ -526,6 +571,24 @@ export default function HomePage() {
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [editingVoucherPaymentId, setEditingVoucherPaymentId] = useState("");
   const [paymentAdminPassword, setPaymentAdminPassword] = useState("");
+  const [organizerSearch, setOrganizerSearch] = useState("");
+  const [organizerDistrictFilter, setOrganizerDistrictFilter] = useState("");
+  const [newOrganizerName, setNewOrganizerName] = useState("");
+  const [newOrganizerMobile, setNewOrganizerMobile] = useState("");
+  const [newOrganizerVillage, setNewOrganizerVillage] = useState("");
+  const [newOrganizerDistrict, setNewOrganizerDistrict] = useState("");
+  const [newOrganizerRate, setNewOrganizerRate] = useState("");
+  const [newOrganizerDeduction, setNewOrganizerDeduction] = useState("0");
+  const [newOrganizerActive, setNewOrganizerActive] = useState(true);
+  const [editingOrganizerId, setEditingOrganizerId] = useState("");
+  const [organizerAssignmentRegistrationId, setOrganizerAssignmentRegistrationId] = useState("");
+  const [organizerAssignmentOrganizerId, setOrganizerAssignmentOrganizerId] = useState("");
+  const [organizerLedgerOrganizerId, setOrganizerLedgerOrganizerId] = useState("");
+  const [organizerPaymentDate, setOrganizerPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [organizerPaymentAmount, setOrganizerPaymentAmount] = useState("");
+  const [organizerPaymentTransactionNo, setOrganizerPaymentTransactionNo] = useState("");
+  const [organizerPaymentRemarks, setOrganizerPaymentRemarks] = useState("");
+  const [editingOrganizerPaymentId, setEditingOrganizerPaymentId] = useState("");
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [isAddingVoucherPayment, setIsAddingVoucherPayment] = useState(false);
   const [dashboardExpandedSections, setDashboardExpandedSections] = useState<
@@ -533,6 +596,8 @@ export default function HomePage() {
   >({
     districts: false,
     godowns: false,
+    organizers: false,
+    organizerNoIntake: false,
     pendingRegistrations: false,
     stackHotspots: false,
     recentReceipts: false,
@@ -592,6 +657,7 @@ export default function HomePage() {
     setRegistrations(data.registrations ?? []);
     setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
     setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+    setOrganizers(data.organizers ?? []);
     setFeatures({
       discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
     });
@@ -605,6 +671,7 @@ export default function HomePage() {
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
+    setOrganizerPayments(data.organizerPayments ?? []);
     setReceipts(data.receipts ?? []);
     setFeatures((current) => ({
       ...current,
@@ -691,10 +758,12 @@ export default function HomePage() {
     setSlipModalOpen(false);
     setHasLoadedCoreData(false);
     setHasLoadedOperationalData(false);
+    setOrganizers([]);
     setLots([]);
     setDiscrepancies([]);
     setDiscrepancyShifts([]);
     setFinancialVouchers([]);
+    setOrganizerPayments([]);
     setReceipts([]);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("krishiv-auth");
@@ -786,7 +855,9 @@ export default function HomePage() {
       "registrations",
       "intake",
       "intakeEdit",
+      "reports",
       "finance",
+      "commission",
       "slips",
       "lots",
       "discrepancies",
@@ -928,6 +999,166 @@ export default function HomePage() {
     0
   );
   const todayReceiptNet = todayReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
+  const isPaymentRegisterReport = reportType === "CUSTOM_DATE_PAYMENT_REGISTER";
+  const paymentRegisterDistrictOptions = Array.from(
+    new Set(financialVouchers.map((item) => item.district?.trim()).filter(Boolean))
+  ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
+  const paymentRegisterVillageOptions = Array.from(
+    new Set(
+      financialVouchers
+        .filter((item) => !reportDistrict || item.district === reportDistrict)
+        .map((item) => item.village?.trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
+  const paymentRegisterFarmerOptions = Array.from(
+    new Set(
+      financialVouchers
+        .filter((item) => !reportDistrict || item.district === reportDistrict)
+        .filter((item) => !reportVillage || item.village === reportVillage)
+        .map((item) => item.farmerName?.trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
+  const paymentRegisterStatusOptions = Array.from(
+    new Set(financialVouchers.map((item) => item.status?.trim()).filter(Boolean))
+  ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
+  const organizerById = new Map(organizers.map((item) => [item.id, item]));
+  const organizerDistrictOptions = Array.from(
+    new Set(organizers.map((item) => item.district?.trim()).filter(Boolean))
+  ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
+  const filteredOrganizerMasterRows = organizers
+    .filter((organizer) => {
+      const query = organizerSearch.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        organizer.name.toLowerCase().includes(query) ||
+        organizer.mobile.toLowerCase().includes(query) ||
+        organizer.village.toLowerCase().includes(query) ||
+        organizer.district.toLowerCase().includes(query);
+      const matchesDistrict = !organizerDistrictFilter || organizer.district === organizerDistrictFilter;
+      return matchesSearch && matchesDistrict;
+    })
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
+  const organizerCommissionRows = organizers
+    .map((organizer) => {
+      const linkedRegistrations = registrations.filter((item) => item.organizerId === organizer.id);
+      const totalIntakeQtl = roundQtl(
+        linkedRegistrations.reduce((sum, item) => sum + Number(item.totalReceivedQtl ?? 0), 0)
+      );
+      const ratePerQtl = roundQtl(Number(organizer.commissionRatePerQtl ?? 0));
+      const grossCommissionAmount = roundQtl(
+        linkedRegistrations.reduce(
+          (sum, item) =>
+            sum + Number(item.totalReceivedQtl ?? 0) * Number(item.organizerCommissionRatePerQtl ?? ratePerQtl),
+          0
+        )
+      );
+      const deductionAmount = roundQtl(Number(organizer.deductionAmount ?? 0));
+      const netPayableAmount = roundQtl(grossCommissionAmount - deductionAmount);
+      const payments = organizerPayments.filter((item) => item.organizerId === organizer.id);
+      const paidAmount = roundQtl(payments.reduce((sum, item) => sum + Number(item.amount ?? 0), 0));
+      return {
+        organizer,
+        linkedRegistrations,
+        farmerCount: linkedRegistrations.length,
+        totalIntakeQtl,
+        ratePerQtl,
+        grossCommissionAmount,
+        deductionAmount,
+        netPayableAmount,
+        paidAmount,
+        balanceAmount: roundQtl(netPayableAmount - paidAmount),
+        paymentCount: payments.length
+      };
+    })
+    .filter((row) => {
+      const query = organizerSearch.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        row.organizer.name.toLowerCase().includes(query) ||
+        row.organizer.mobile.toLowerCase().includes(query) ||
+        row.organizer.village.toLowerCase().includes(query) ||
+        row.organizer.district.toLowerCase().includes(query);
+      const matchesDistrict = !organizerDistrictFilter || row.organizer.district === organizerDistrictFilter;
+      return matchesSearch && matchesDistrict;
+    })
+    .sort((left, right) => left.organizer.name.localeCompare(right.organizer.name, "en", { sensitivity: "base" }));
+  const organizerDashboardRows: OrganizerDashboardRow[] = organizerCommissionRows
+    .map((row) => ({
+      ...row,
+      coveragePct:
+        row.netPayableAmount > 0
+          ? roundQtl((row.paidAmount / row.netPayableAmount) * 100)
+          : 0
+    }))
+    .sort((left, right) => right.balanceAmount - left.balanceAmount);
+  const visibleOrganizerDashboardRows = dashboardExpandedSections.organizers
+    ? organizerDashboardRows
+    : organizerDashboardRows.slice(0, 5);
+  const organizerLinkedFarmerCount = registrations.filter((item) => Boolean(item.organizerId)).length;
+  const organizerGrossCommission = roundQtl(
+    organizerCommissionRows.reduce((sum, row) => sum + row.grossCommissionAmount, 0)
+  );
+  const organizerDeductionTotal = roundQtl(
+    organizerCommissionRows.reduce((sum, row) => sum + row.deductionAmount, 0)
+  );
+  const organizerNetPayableTotal = roundQtl(
+    organizerCommissionRows.reduce((sum, row) => sum + row.netPayableAmount, 0)
+  );
+  const organizerPaidTotal = roundQtl(
+    organizerCommissionRows.reduce((sum, row) => sum + row.paidAmount, 0)
+  );
+  const organizerBalanceTotal = roundQtl(
+    organizerCommissionRows.reduce((sum, row) => sum + row.balanceAmount, 0)
+  );
+  const organizerPendingCount = organizerCommissionRows.filter((row) => row.balanceAmount > 0).length;
+  const organizerNoIntakeRows = organizerCommissionRows
+    .map((row) => {
+      const zeroIntakeRegistrations = row.linkedRegistrations
+        .filter((registration) => Number(registration.totalReceivedQtl ?? 0) <= 0)
+        .slice()
+        .sort((left, right) => Number(right.balanceQtl ?? 0) - Number(left.balanceQtl ?? 0));
+      return {
+        ...row,
+        zeroIntakeRegistrations,
+        zeroIntakeFarmerCount: zeroIntakeRegistrations.length,
+        zeroIntakePendingQty: roundQtl(
+          zeroIntakeRegistrations.reduce((sum, registration) => sum + Number(registration.balanceQtl ?? 0), 0)
+        ),
+        farmerPreview: zeroIntakeRegistrations
+          .slice(0, 3)
+          .map((registration) => registration.farmerName)
+          .join(", ")
+      };
+    })
+    .filter((row) => row.zeroIntakeFarmerCount > 0)
+    .sort((left, right) => right.zeroIntakePendingQty - left.zeroIntakePendingQty);
+  const visibleOrganizerNoIntakeRows = dashboardExpandedSections.organizerNoIntake
+    ? organizerNoIntakeRows
+    : organizerNoIntakeRows.slice(0, 5);
+  const organizerNoIntakeFarmerCount = organizerNoIntakeRows.reduce(
+    (sum, row) => sum + row.zeroIntakeFarmerCount,
+    0
+  );
+  const organizerNoIntakePendingQty = roundQtl(
+    organizerNoIntakeRows.reduce((sum, row) => sum + row.zeroIntakePendingQty, 0)
+  );
+  const organizerAssignmentRegistration =
+    registrations.find((item) => item.id === organizerAssignmentRegistrationId) ?? null;
+  const organizerLedgerSummary =
+    organizerCommissionRows.find((item) => item.organizer.id === organizerLedgerOrganizerId) ?? null;
+  const organizerLedgerPayments = organizerPayments
+    .filter((item) => item.organizerId === organizerLedgerOrganizerId)
+    .slice()
+    .sort((left, right) => {
+      const dateCompare = left.paymentDate.localeCompare(right.paymentDate);
+      if (dateCompare !== 0) {
+        return dateCompare;
+      }
+      return left.transactionNo.localeCompare(right.transactionNo, "en", { sensitivity: "base" });
+    });
   const visibleNavSections = navSections
     .map((section) => ({
       ...section,
@@ -1484,6 +1715,276 @@ export default function HomePage() {
     });
   }
 
+  function resetOrganizerForm() {
+    setEditingOrganizerId("");
+    setNewOrganizerName("");
+    setNewOrganizerMobile("");
+    setNewOrganizerVillage("");
+    setNewOrganizerDistrict("");
+    setNewOrganizerRate("");
+    setNewOrganizerDeduction("0");
+    setNewOrganizerActive(true);
+  }
+
+  function openOrganizerForEdit(organizer: Organizer) {
+    setEditingOrganizerId(organizer.id);
+    setNewOrganizerName(organizer.name);
+    setNewOrganizerMobile(organizer.mobile ?? "");
+    setNewOrganizerVillage(organizer.village ?? "");
+    setNewOrganizerDistrict(organizer.district ?? "");
+    setNewOrganizerRate(String(organizer.commissionRatePerQtl ?? 0));
+    setNewOrganizerDeduction(String(organizer.deductionAmount ?? 0));
+    setNewOrganizerActive(Boolean(organizer.isActive));
+    setActiveView("commission");
+  }
+
+  function saveOrganizer() {
+    if (!requirePermission("canVoucher", "Your role cannot manage organizer commission master.")) {
+      return;
+    }
+    if (!newOrganizerName.trim()) {
+      notifyUser("Enter organizer name.");
+      return;
+    }
+    if (!newOrganizerRate.trim() || Number(newOrganizerRate) < 0) {
+      notifyUser("Enter a valid commission rate per QTL.");
+      return;
+    }
+    if (!newOrganizerDeduction.trim() || Number(newOrganizerDeduction) < 0) {
+      notifyUser("Enter a valid deduction amount.");
+      return;
+    }
+
+    void (async () => {
+      const isEditing = Boolean(editingOrganizerId);
+      const response = await fetchWithAuth(
+        isEditing
+          ? `${API_BASE}/api/seed/masters/organizers/${editingOrganizerId}`
+          : `${API_BASE}/api/seed/masters/organizers`,
+        {
+          method: isEditing ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: newOrganizerName.trim(),
+            mobile: newOrganizerMobile.trim(),
+            village: newOrganizerVillage.trim(),
+            district: newOrganizerDistrict.trim(),
+            commissionRatePerQtl: Number(newOrganizerRate),
+            deductionAmount: Number(newOrganizerDeduction),
+            isActive: newOrganizerActive
+          })
+        }
+      );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to save organizer.");
+      }
+      await loadBootstrap();
+      resetOrganizerForm();
+      notifyUser(isEditing ? "Organizer updated successfully." : "Organizer created successfully.");
+    })().catch((error) => {
+      notifyUser(error instanceof Error ? error.message : "Unable to save organizer.");
+    });
+  }
+
+  function deleteOrganizer(organizer: Organizer) {
+    if (!requirePermission("canDelete", "Only Admin can delete organizer master.")) {
+      return;
+    }
+    const confirmed = confirmDestructiveAction({
+      itemLabel: `Organizer: ${organizer.name}`
+    });
+    if (!confirmed) {
+      notifyUser("Delete cancelled. No organizer was deleted.", false);
+      return;
+    }
+
+    void (async () => {
+      const response = await fetchWithAuth(`${API_BASE}/api/seed/masters/organizers/${organizer.id}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to delete organizer.");
+      }
+      await loadBootstrap();
+      if (editingOrganizerId === organizer.id) {
+        resetOrganizerForm();
+      }
+      notifyUser("Organizer deleted successfully.");
+    })().catch((error) => {
+      notifyUser(error instanceof Error ? error.message : "Unable to delete organizer.");
+    });
+  }
+
+  function openOrganizerAssignment(registrationId: string) {
+    setOrganizerAssignmentRegistrationId(registrationId);
+    const registration = registrations.find((item) => item.id === registrationId);
+    setOrganizerAssignmentOrganizerId(registration?.organizerId ?? "");
+  }
+
+  function closeOrganizerAssignment() {
+    setOrganizerAssignmentRegistrationId("");
+    setOrganizerAssignmentOrganizerId("");
+  }
+
+  function saveOrganizerAssignment() {
+    if (!requirePermission("canEdit", "Your role cannot assign organizer to farmer registration.")) {
+      return;
+    }
+    if (!organizerAssignmentRegistrationId) {
+      notifyUser("Select a farmer registration first.");
+      return;
+    }
+
+    void (async () => {
+      const response = await fetchWithAuth(
+        `${API_BASE}/api/seed/registrations/${organizerAssignmentRegistrationId}/organizer`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            organizerId: organizerAssignmentOrganizerId
+          })
+        }
+      );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to assign organizer.");
+      }
+      await loadBootstrap();
+      closeOrganizerAssignment();
+      notifyUser("Organizer mapping saved successfully.");
+    })().catch((error) => {
+      notifyUser(error instanceof Error ? error.message : "Unable to assign organizer.");
+    });
+  }
+
+  function openOrganizerLedger(organizerId: string) {
+    setOrganizerLedgerOrganizerId(organizerId);
+    setOrganizerPaymentDate(new Date().toISOString().slice(0, 10));
+    setOrganizerPaymentAmount("");
+    setOrganizerPaymentTransactionNo("");
+    setOrganizerPaymentRemarks("");
+    setEditingOrganizerPaymentId("");
+  }
+
+  function closeOrganizerLedger() {
+    setOrganizerLedgerOrganizerId("");
+    setOrganizerPaymentDate(new Date().toISOString().slice(0, 10));
+    setOrganizerPaymentAmount("");
+    setOrganizerPaymentTransactionNo("");
+    setOrganizerPaymentRemarks("");
+    setEditingOrganizerPaymentId("");
+  }
+
+  function beginEditOrganizerPayment(payment: OrganizerPayment) {
+    setEditingOrganizerPaymentId(payment.id);
+    setOrganizerPaymentDate(payment.paymentDate);
+    setOrganizerPaymentAmount(String(payment.amount));
+    setOrganizerPaymentTransactionNo(payment.transactionNo);
+    setOrganizerPaymentRemarks(payment.remarks ?? "");
+  }
+
+  function saveOrganizerPayment() {
+    if (!requirePermission("canVoucher", "Your role cannot record organizer commission payments.")) {
+      return;
+    }
+    if (!organizerLedgerOrganizerId) {
+      notifyUser("Open organizer ledger first.");
+      return;
+    }
+    if (!organizerPaymentDate) {
+      notifyUser("Select payment date.");
+      return;
+    }
+    if (!organizerPaymentAmount.trim() || Number(organizerPaymentAmount) <= 0) {
+      notifyUser("Enter a valid payment amount.");
+      return;
+    }
+    if (!organizerPaymentTransactionNo.trim()) {
+      notifyUser("Transaction number is required.");
+      return;
+    }
+
+    void (async () => {
+      const isEditing = Boolean(editingOrganizerPaymentId);
+      const response = await fetchWithAuth(
+        isEditing
+          ? `${API_BASE}/api/seed/organizer-payments/${editingOrganizerPaymentId}`
+          : `${API_BASE}/api/seed/organizer-payments`,
+        {
+          method: isEditing ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            organizerId: organizerLedgerOrganizerId,
+            paymentDate: organizerPaymentDate,
+            amount: Number(organizerPaymentAmount),
+            transactionNo: organizerPaymentTransactionNo.trim(),
+            remarks: organizerPaymentRemarks.trim()
+          })
+        }
+      );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to save organizer commission payment.");
+      }
+      await loadOperationalBootstrap();
+      setOrganizerPaymentDate(new Date().toISOString().slice(0, 10));
+      setOrganizerPaymentAmount("");
+      setOrganizerPaymentTransactionNo("");
+      setOrganizerPaymentRemarks("");
+      setEditingOrganizerPaymentId("");
+      notifyUser(isEditing ? "Organizer commission payment updated." : "Organizer commission payment recorded.");
+    })().catch((error) => {
+      notifyUser(
+        error instanceof Error ? error.message : "Unable to save organizer commission payment."
+      );
+    });
+  }
+
+  function deleteOrganizerPayment(payment: OrganizerPayment) {
+    if (!requirePermission("canVoucher", "Your role cannot delete organizer commission payments.")) {
+      return;
+    }
+    const confirmed = confirmDestructiveAction({
+      itemLabel: `Transaction No.: ${payment.transactionNo}`
+    });
+    if (!confirmed) {
+      notifyUser("Delete cancelled. No organizer commission payment was deleted.", false);
+      return;
+    }
+
+    void (async () => {
+      const response = await fetchWithAuth(`${API_BASE}/api/seed/organizer-payments/${payment.id}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to delete organizer commission payment.");
+      }
+      await loadOperationalBootstrap();
+      if (editingOrganizerPaymentId === payment.id) {
+        setOrganizerPaymentDate(new Date().toISOString().slice(0, 10));
+        setOrganizerPaymentAmount("");
+        setOrganizerPaymentTransactionNo("");
+        setOrganizerPaymentRemarks("");
+        setEditingOrganizerPaymentId("");
+      }
+      notifyUser("Organizer commission payment deleted.");
+    })().catch((error) => {
+      notifyUser(
+        error instanceof Error ? error.message : "Unable to delete organizer commission payment."
+      );
+    });
+  }
+
   function updateDraftLine(
     lineId: string,
     field: keyof Omit<IntakeReceiptLine, "allocations">,
@@ -2013,6 +2514,147 @@ export default function HomePage() {
     };
   }
 
+  function buildCustomDatePaymentRegisterPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const villageFilter = reportVillage.trim().toLowerCase();
+    const farmerFilter = reportFarmerName.trim().toLowerCase();
+    const statusFilterValue = reportPaymentStatus.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const paymentRows = financialVouchers
+      .flatMap((voucher) =>
+        (voucher.payments ?? []).map((payment) => ({
+          date: payment.paymentDate,
+          voucherNo: voucher.voucherNo,
+          farmerName: voucher.farmerName,
+          regCode: voucher.cropRegistrationCode,
+          village: voucher.village || "-",
+          district: voucher.district || "-",
+          status: voucher.status || "DRAFT",
+          transactionNo: payment.transactionNo || "-",
+          mode: payment.mode || "RTGS/NEFT",
+          amount: Number(payment.amount ?? 0)
+        }))
+      )
+      .filter((row) => !fromDate || row.date >= fromDate)
+      .filter((row) => !toDate || row.date <= toDate)
+      .filter((row) => !districtFilter || row.district.toLowerCase() === districtFilter)
+      .filter((row) => !villageFilter || row.village.toLowerCase() === villageFilter)
+      .filter((row) => !farmerFilter || row.farmerName.toLowerCase() === farmerFilter)
+      .filter((row) => !statusFilterValue || row.status.toLowerCase() === statusFilterValue)
+      .sort((left, right) => {
+        const dateCompare = left.date.localeCompare(right.date);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        const voucherCompare = left.voucherNo.localeCompare(right.voucherNo, "en", {
+          sensitivity: "base",
+          numeric: true
+        });
+        if (voucherCompare !== 0) {
+          return voucherCompare;
+        }
+        return left.farmerName.localeCompare(right.farmerName, "en", {
+          sensitivity: "base"
+        });
+      });
+
+    const previewRows = paymentRows.map((row, index) => ({
+      "S.No.": index + 1,
+      Date: formatDateDisplay(row.date),
+      "Voucher No.": row.voucherNo,
+      "Farmer Name": row.farmerName,
+      "Reg. Code": row.regCode,
+      Village: row.village,
+      District: row.district,
+      Status: row.status,
+      "Transaction No.": row.transactionNo,
+      Mode: row.mode,
+      Amount: roundQtl(row.amount)
+    }));
+
+    const districtSummary = Array.from(
+      paymentRows.reduce((map, row) => {
+        const current = map.get(row.district) ?? { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount = roundQtl(current.amount + row.amount);
+        map.set(row.district, current);
+        return map;
+      }, new Map<string, { count: number; amount: number }>())
+    )
+      .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+      .map(([district, summary]) => `${district}: ${summary.count} / ${formatNumber(summary.amount)}`)
+      .join(" | ") || "-";
+
+    const statusSummary = Array.from(
+      paymentRows.reduce((map, row) => {
+        const current = map.get(row.status) ?? { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount = roundQtl(current.amount + row.amount);
+        map.set(row.status, current);
+        return map;
+      }, new Map<string, { count: number; amount: number }>())
+    )
+      .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+      .map(([status, summary]) => `${status}: ${summary.count} / ${formatNumber(summary.amount)}`)
+      .join(" | ") || "-";
+
+    return {
+      reportType: "CUSTOM_DATE_PAYMENT_REGISTER",
+      title: "Custom Date Payment Register",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "S.No.": 1,
+          Date: "",
+          "Voucher No.": "",
+          "Farmer Name": "",
+          "Reg. Code": "",
+          Village: "",
+          District: "",
+          Status: "",
+          "Transaction No.": "",
+          Mode: "",
+          Amount: 0
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        "From Date": fromDate ? formatDateDisplay(fromDate) : "ALL",
+        "To Date": toDate ? formatDateDisplay(toDate) : "ALL",
+        "Total Entries": previewRows.length,
+        "Total Amount": formatNumber(paymentRows.reduce((sum, row) => sum + row.amount, 0)),
+        "Unique Farmers": new Set(paymentRows.map((row) => row.regCode)).size,
+        "District Summary": districtSummary,
+        "Status Summary": statusSummary
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `payment-register-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
+  function buildLocalReportWorkbook(preview: ReportPreview) {
+    const rows: (string | number)[][] = [];
+    rows.push([preview.title]);
+    rows.push([`Generated At: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`]);
+    rows.push([]);
+    rows.push(preview.columns);
+    for (const row of preview.rows) {
+      rows.push(preview.columns.map((column) => row[column] ?? ""));
+    }
+    rows.push([]);
+    rows.push(["Totals"]);
+    for (const [key, value] of Object.entries(preview.totals)) {
+      rows.push([key, value]);
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, preview.title.slice(0, 31) || "Report");
+    return workbook;
+  }
+
   function runDatabaseBackup() {
     if (!requirePermission("canMaintenance", "Only Admin can run database backup.")) {
       return;
@@ -2071,6 +2713,10 @@ export default function HomePage() {
   }
 
   async function fetchReportPreviewData() {
+    if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER") {
+      return buildCustomDatePaymentRegisterPreview();
+    }
+
     const response = await fetchWithAuth(`${API_BASE}/api/seed/reports/preview`, {
       method: "POST",
       headers: {
@@ -2098,6 +2744,17 @@ export default function HomePage() {
 
   function downloadReportWorkbook() {
     void (async () => {
+      if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER") {
+        const preview = reportPreview ?? buildCustomDatePaymentRegisterPreview();
+        if (!reportPreview) {
+          setReportPreview(preview);
+        }
+        const workbook = buildLocalReportWorkbook(preview);
+        XLSX.writeFile(workbook, preview.fileName || "payment-register.xlsx");
+        notifyUser("Report workbook downloaded.");
+        return;
+      }
+
       const response = await fetchWithAuth(`${API_BASE}/api/seed/reports/export`, {
         method: "POST",
         headers: {
@@ -2215,6 +2872,8 @@ export default function HomePage() {
     setReportStackNo("");
     setReportRegistrationCode("");
     setReportFarmerName("");
+    setReportVillage("");
+    setReportPaymentStatus("");
     setReportMode("ALL");
     setReportPreview(null);
   }
@@ -3577,6 +4236,222 @@ export default function HomePage() {
     notifyUser(`Payment ledger for ${voucher.voucherNo} downloaded.`);
   }
 
+  function downloadOrganizerCommissionVoucherPdf(summary: OrganizerCommissionRow) {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const left = 12;
+    const right = pageWidth - 12;
+    let y = 12;
+    const payments = organizerPayments
+      .filter((item) => item.organizerId === summary.organizer.id)
+      .slice()
+      .sort((leftPayment, rightPayment) => {
+        const dateCompare = leftPayment.paymentDate.localeCompare(rightPayment.paymentDate);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        return leftPayment.transactionNo.localeCompare(rightPayment.transactionNo, "en", {
+          sensitivity: "base"
+        });
+      });
+
+    doc.setDrawColor(91, 61, 38);
+    doc.setLineWidth(0.3);
+    doc.line(left, y, right, y);
+    y += 5;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
+    y += 6;
+    doc.text("ORGANIZER COMMISSION VOUCHER", pageWidth / 2, y, { align: "center" });
+    y += 5;
+    doc.line(left, y, right, y);
+    y += 7;
+
+    const summaryLines: Array<[string, string]> = [
+      ["Organizer Name", summary.organizer.name],
+      ["Mobile", summary.organizer.mobile || "-"],
+      ["Village", summary.organizer.village || "-"],
+      ["District", summary.organizer.district || "-"],
+      ["Commission Rate / QTL", formatNumber(summary.ratePerQtl)],
+      ["Linked Farmers", String(summary.farmerCount)],
+      ["Total Intake Qty", `${formatNumber(summary.totalIntakeQtl)} QTL`],
+      ["Gross Commission", formatNumber(summary.grossCommissionAmount)],
+      ["Deduction Amount", formatNumber(summary.deductionAmount)],
+      ["Net Payable", formatNumber(summary.netPayableAmount)],
+      ["Commission Paid", formatNumber(summary.paidAmount)],
+      ["Balance", formatNumber(summary.balanceAmount)]
+    ];
+
+    summaryLines.forEach(([label, value], index) => {
+      const x = index % 2 === 0 ? left : left + 95;
+      const rowY = y + Math.floor(index / 2) * 5.2;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(label, x, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, x + 34, rowY, { maxWidth: 58 });
+    });
+    y += Math.ceil(summaryLines.length / 2) * 5.2 + 4;
+
+    doc.line(left, y, right, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text("Linked Farmer Intake Detail", left, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["S.No.", "Reg. Code", "Farmer Name", "Village", "Received QTL", "Rate/QTL", "Commission"]],
+      body: (summary.linkedRegistrations.length
+        ? summary.linkedRegistrations
+            .slice()
+            .sort((leftReg, rightReg) =>
+              leftReg.cropRegistrationCode.localeCompare(rightReg.cropRegistrationCode, "en", {
+                sensitivity: "base",
+                numeric: true
+              })
+            )
+            .map((registration, index) => [
+              String(index + 1),
+              registration.cropRegistrationCode,
+              registration.farmerName,
+              registration.village || "-",
+              formatNumber(Number(registration.totalReceivedQtl ?? 0)),
+              formatNumber(
+                Number(registration.organizerCommissionRatePerQtl ?? summary.ratePerQtl)
+              ),
+              formatNumber(
+                roundQtl(
+                  Number(registration.totalReceivedQtl ?? 0) *
+                    Number(registration.organizerCommissionRatePerQtl ?? summary.ratePerQtl)
+                )
+              )
+            ])
+        : [["-", "-", "No linked farmers", "-", "-", "-", "-"]]),
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 7.2,
+        cellPadding: 1.3,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 50 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 22, halign: "right" },
+        5: { cellWidth: 20, halign: "right" },
+        6: { cellWidth: 24, halign: "right" }
+      }
+    });
+
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 6;
+    if (y > pageHeight - 70) {
+      doc.addPage();
+      y = 12;
+    }
+
+    doc.line(left, y, right, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text("Commission Payment History", left, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["S.No.", "Date", "Transaction No.", "Amount", "Remarks", "Entered By"]],
+      body: (payments.length
+        ? payments.map((payment, index) => [
+            String(index + 1),
+            formatDateDisplay(payment.paymentDate),
+            payment.transactionNo,
+            formatNumber(Number(payment.amount ?? 0)),
+            payment.remarks || "-",
+            payment.createdBy || "-"
+          ])
+        : [["-", "-", "No payment recorded", "-", "-", "-"]]),
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 7.1,
+        cellPadding: 1.3,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 24, halign: "right" },
+        4: { cellWidth: 58 },
+        5: { cellWidth: 24 }
+      }
+    });
+
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 6;
+    if (y > pageHeight - 30) {
+      doc.addPage();
+      y = 12;
+    }
+
+    doc.line(left, y, right, y);
+    y += 5;
+    doc.setFont("helvetica", "bold");
+    doc.text("Voucher Totals", left, y);
+    y += 5;
+
+    [
+      ["Gross Commission", formatNumber(summary.grossCommissionAmount)],
+      ["Deduction Amount", formatNumber(summary.deductionAmount)],
+      ["Net Commission Payable", formatNumber(summary.netPayableAmount)],
+      ["Total Commission Paid", formatNumber(summary.paidAmount)],
+      ["Closing Balance", formatNumber(summary.balanceAmount)]
+    ].forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(label, left, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`: ${value}`, left + 46, y);
+      y += 5;
+    });
+
+    y += 4;
+    doc.line(left, y, right, y);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.text("Prepared By          : __________________", left, y);
+    doc.text("Checked By          : __________________", left + 70, y);
+    y += 7;
+    doc.text("Approved By         : __________________", left, y);
+    doc.text("Organizer Sign      : __________________", left + 70, y);
+    y += 5;
+    doc.line(left, y, right, y);
+
+    doc.save(
+      `${summary.organizer.name.replace(/[^A-Za-z0-9_-]+/g, "_")}_commission_voucher.pdf`
+    );
+    notifyUser(`Commission voucher for ${summary.organizer.name} downloaded.`);
+  }
+
   function printSlipPdf() {
     if (!slipPreview) {
       notifyUser("Load a slip preview first.");
@@ -3864,6 +4739,11 @@ export default function HomePage() {
                     <strong>{formatNumber(discrepancyExposurePct)}%</strong>
                     <small>{dashboardMetrics.discrepancyCount} open cases</small>
                   </div>
+                  <div className="dashboardHeroCard">
+                    <span>Organizer Net Payable</span>
+                    <strong>{formatNumber(organizerNetPayableTotal)} INR</strong>
+                    <small>{organizerPendingCount} organizer(s) pending settlement</small>
+                  </div>
                 </div>
               </section>
 
@@ -3925,6 +4805,31 @@ export default function HomePage() {
                     <span>{paidVoucherCount} paid or overpaid</span>
                   </div>
                 </article>
+                <article className="dashboardProgressCard">
+                  <div className="panelHeader">
+                    <h3>Organizer Settlement</h3>
+                    <span>{organizerCommissionRows.length} organizers</span>
+                  </div>
+                  <div className="dashboardProgress">
+                    <div
+                      className="dashboardProgressBar"
+                      style={{
+                        width: `${
+                          organizerNetPayableTotal > 0
+                            ? Math.max(
+                                Math.min((organizerPaidTotal / organizerNetPayableTotal) * 100, 100),
+                                0
+                              )
+                            : 0
+                        }%`
+                      }}
+                    />
+                  </div>
+                  <div className="dashboardProgressMeta">
+                    <span>{formatNumber(organizerDeductionTotal)} INR deducted</span>
+                    <span>{formatNumber(organizerBalanceTotal)} INR balance</span>
+                  </div>
+                </article>
               </section>
 
               <section className="panel metricsPanel dashboardMetricsPanel">
@@ -3976,6 +4881,30 @@ export default function HomePage() {
                   <span>Shifted Qty</span>
                   <strong>{formatNumber(dashboardMetrics.shiftedQty)} QTL</strong>
                 </div>
+                <div className="metricBox">
+                  <span>Organizer Linked Farmers</span>
+                  <strong>{organizerLinkedFarmerCount}</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Gross Organizer Commission</span>
+                  <strong>{formatNumber(organizerGrossCommission)} INR</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Organizer Deduction</span>
+                  <strong>{formatNumber(organizerDeductionTotal)} INR</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Organizer Balance</span>
+                  <strong>{formatNumber(organizerBalanceTotal)} INR</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Organizer Farmers Not Yet Intake</span>
+                  <strong>{organizerNoIntakeFarmerCount}</strong>
+                </div>
+                <div className="metricBox">
+                  <span>No-Intake Pending Qty</span>
+                  <strong>{formatNumber(organizerNoIntakePendingQty)} QTL</strong>
+                </div>
               </section>
 
               <section className="panel twoColumn">
@@ -3996,6 +4925,9 @@ export default function HomePage() {
                     </button>
                     <button className="secondaryButton" type="button" onClick={() => setActiveView("finance")}>
                       Voucher Register
+                    </button>
+                    <button className="secondaryButton" type="button" onClick={() => setActiveView("commission")}>
+                      Organizer Commission
                     </button>
                     {features.discrepancyWorkflow ? (
                       <button
@@ -4020,9 +4952,149 @@ export default function HomePage() {
                     <li>{dashboardMetrics.discrepancyCount} discrepancy cases remain open across {stackHotspotRows.length} stack hotspot groups</li>
                     <li>{pendingRegistrationRows.length} major registrations still have substantial balance pending intake</li>
                     <li>{unpaidVoucherCount} vouchers are not fully settled and outstanding balance is {formatNumber(voucherBalanceOutstanding)} INR</li>
+                    <li>{organizerPendingCount} organizers still have {formatNumber(organizerBalanceTotal)} INR pending after {formatNumber(organizerDeductionTotal)} INR deduction</li>
+                    <li>{organizerNoIntakeFarmerCount} organizer-linked farmers still have zero intake against {formatNumber(organizerNoIntakePendingQty)} QTL pending quantity</li>
                     <li>{dashboardMetrics.shiftedCases} discrepancy shift entries have already moved {formatNumber(dashboardMetrics.shiftedQty)} QTL</li>
                     <li>{features.discrepancyWorkflow ? "Over-intake is being tracked through discrepancy workflow." : "Over-intake is fully blocked at intake save level."}</li>
                   </ul>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.organizers ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Organizer Commission Board</h3>
+                      <p>Net payable, deduction, and settlement position organizer-wise</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("organizers")}
+                      >
+                        {dashboardExpandedSections.organizers ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("commission")}>
+                        Open Commission
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Organizer</th>
+                          <th>District</th>
+                          <th>Farmers</th>
+                          <th>Gross</th>
+                          <th>Deduction</th>
+                          <th>Net Payable</th>
+                          <th>Paid</th>
+                          <th>Balance</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleOrganizerDashboardRows.length ? (
+                          visibleOrganizerDashboardRows.map((row) => (
+                            <tr
+                              key={row.organizer.id}
+                              className="clickableRow"
+                              onClick={() => openOrganizerLedger(row.organizer.id)}
+                            >
+                              <td>{row.organizer.name}</td>
+                              <td>{row.organizer.district || "-"}</td>
+                              <td>{row.farmerCount}</td>
+                              <td>{formatNumber(row.grossCommissionAmount)}</td>
+                              <td>{formatNumber(row.deductionAmount)}</td>
+                              <td>{formatNumber(row.netPayableAmount)}</td>
+                              <td>{formatNumber(row.paidAmount)}</td>
+                              <td>{formatNumber(row.balanceAmount)}</td>
+                              <td>
+                                <span className={`status ${row.balanceAmount <= 0 ? "full" : "active"}`}>
+                                  {row.balanceAmount <= 0 ? "SETTLED" : row.paidAmount > 0 ? "PART PAID" : "PENDING"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={9} className="emptyStateCell">
+                              No organizer commission record available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.organizerNoIntake ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Organizer Farmers Not Yet Intake</h3>
+                      <p>Organizer-wise list of linked farmers whose intake has not started yet</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("organizerNoIntake")}
+                      >
+                        {dashboardExpandedSections.organizerNoIntake ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("commission")}>
+                        Open Commission
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Organizer</th>
+                          <th>District</th>
+                          <th>No-Intake Farmers</th>
+                          <th>Pending Qty</th>
+                          <th>Farmer Preview</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleOrganizerNoIntakeRows.length ? (
+                          visibleOrganizerNoIntakeRows.map((row) => (
+                            <tr
+                              key={row.organizer.id}
+                              className="clickableRow"
+                              onClick={() => openOrganizerLedger(row.organizer.id)}
+                            >
+                              <td>{row.organizer.name}</td>
+                              <td>{row.organizer.district || "-"}</td>
+                              <td>{row.zeroIntakeFarmerCount}</td>
+                              <td>{formatNumber(row.zeroIntakePendingQty)} QTL</td>
+                              <td>{row.farmerPreview || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="emptyStateCell">
+                              No organizer-linked farmer is pending first intake.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </article>
               </section>
 
@@ -4754,6 +5826,7 @@ export default function HomePage() {
                             Status
                           </button>
                         </th>
+                        <th>Organizer</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -4773,6 +5846,16 @@ export default function HomePage() {
                             <span className={`status ${item.status.toLowerCase()}`}>{item.status}</span>
                           </td>
                           <td>
+                            {item.organizerName ? (
+                              <div>
+                                <strong>{item.organizerName}</strong>
+                                <div>{formatNumber(Number(item.organizerCommissionRatePerQtl ?? 0))}/QTL</div>
+                              </div>
+                            ) : (
+                              <span>-</span>
+                            )}
+                          </td>
+                          <td>
                             {item.status === "ACTIVE" ? (
                               <div className="actionButtons">
                                 <button
@@ -4789,6 +5872,13 @@ export default function HomePage() {
                                 >
                                   Deposit View
                                 </button>
+                                <button
+                                  className="secondaryButton smallButton"
+                                  onClick={() => openOrganizerAssignment(item.id)}
+                                  type="button"
+                                >
+                                  Organizer
+                                </button>
                               </div>
                             ) : (
                               <div className="actionButtons">
@@ -4798,6 +5888,13 @@ export default function HomePage() {
                                   type="button"
                                 >
                                   Deposit View
+                                </button>
+                                <button
+                                  className="secondaryButton smallButton"
+                                  onClick={() => openOrganizerAssignment(item.id)}
+                                  type="button"
+                                >
+                                  Organizer
                                 </button>
                               </div>
                             )}
@@ -4855,6 +5952,12 @@ export default function HomePage() {
                     <span>
                       Balance {formatNumber(availableBalanceForSave)} QTL of{" "}
                       {formatNumber(selectedRegistration.allowedIntakeQtl)} QTL
+                    </span>
+                    <span>
+                      Organizer: {selectedRegistration.organizerName || "Not linked"}{" "}
+                      {selectedRegistration.organizerName
+                        ? `(${formatNumber(Number(selectedRegistration.organizerCommissionRatePerQtl ?? 0))}/QTL)`
+                        : ""}
                     </span>
                     {features.discrepancyWorkflow ? (
                       <span>
@@ -5072,6 +6175,12 @@ export default function HomePage() {
                     line.
                   </p>
                 )}
+                {isPaymentRegisterReport && (
+                  <p className="mastersIntro">
+                    Custom Date Payment Register shows all recorded voucher payments in the selected date range,
+                    always sorted by payment date.
+                  </p>
+                )}
                 <div className="formGrid">
                   <label>
                     <span>Report Type</span>
@@ -5083,10 +6192,12 @@ export default function HomePage() {
                       ))}
                     </select>
                   </label>
-                  <label>
-                    <span>Season</span>
-                    <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
-                  </label>
+                  {!isPaymentRegisterReport && (
+                    <label>
+                      <span>Season</span>
+                      <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
+                    </label>
+                  )}
                   <label>
                     <span>From Date</span>
                     <input type="date" value={reportFromDate} onChange={(event) => setReportFromDate(event.target.value)} />
@@ -5096,52 +6207,116 @@ export default function HomePage() {
                     <input type="date" value={reportToDate} onChange={(event) => setReportToDate(event.target.value)} />
                   </label>
                   <label>
-                    <span>Crop</span>
-                    <input value={reportCrop} onChange={(event) => setReportCrop(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>Variety</span>
-                    <input value={reportVariety} onChange={(event) => setReportVariety(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>Seed Class</span>
-                    <input value={reportClassStage} onChange={(event) => setReportClassStage(event.target.value)} />
-                  </label>
-                  <label>
                     <span>District</span>
-                    <input value={reportDistrict} onChange={(event) => setReportDistrict(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>Godown</span>
-                    <select value={reportGodownId} onChange={(event) => setReportGodownId(event.target.value)}>
-                      <option value="">All Godowns</option>
-                      {godowns.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Stack No.</span>
-                    <input value={reportStackNo} onChange={(event) => setReportStackNo(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>Reg. Code</span>
-                    <input value={reportRegistrationCode} onChange={(event) => setReportRegistrationCode(event.target.value)} />
+                    {isPaymentRegisterReport ? (
+                      <select
+                        value={reportDistrict}
+                        onChange={(event) => {
+                          setReportDistrict(event.target.value);
+                          setReportVillage("");
+                          setReportFarmerName("");
+                        }}
+                      >
+                        <option value="">All Districts</option>
+                        {paymentRegisterDistrictOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input value={reportDistrict} onChange={(event) => setReportDistrict(event.target.value)} />
+                    )}
                   </label>
                   <label>
                     <span>Farmer Name</span>
-                    <input value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)} />
+                    {isPaymentRegisterReport ? (
+                      <select value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)}>
+                        <option value="">All Farmers</option>
+                        {paymentRegisterFarmerOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)} />
+                    )}
                   </label>
-                  <label>
-                    <span>Report Mode</span>
-                    <select value={reportMode} onChange={(event) => setReportMode(event.target.value as ReportMode)}>
-                      <option value="ALL">Accepted + Discrepancy</option>
-                      <option value="ACCEPTED_ONLY">Accepted Only</option>
-                      <option value="DISCREPANCY_ONLY">Discrepancy Only</option>
-                    </select>
-                  </label>
+                  {isPaymentRegisterReport ? (
+                    <>
+                      <label>
+                        <span>Village</span>
+                        <select
+                          value={reportVillage}
+                          onChange={(event) => {
+                            setReportVillage(event.target.value);
+                            setReportFarmerName("");
+                          }}
+                        >
+                          <option value="">All Villages</option>
+                          {paymentRegisterVillageOptions.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Status</span>
+                        <select value={reportPaymentStatus} onChange={(event) => setReportPaymentStatus(event.target.value)}>
+                          <option value="">All Status</option>
+                          {paymentRegisterStatusOptions.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label>
+                        <span>Crop</span>
+                        <input value={reportCrop} onChange={(event) => setReportCrop(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Variety</span>
+                        <input value={reportVariety} onChange={(event) => setReportVariety(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Seed Class</span>
+                        <input value={reportClassStage} onChange={(event) => setReportClassStage(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Godown</span>
+                        <select value={reportGodownId} onChange={(event) => setReportGodownId(event.target.value)}>
+                          <option value="">All Godowns</option>
+                          {godowns.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Stack No.</span>
+                        <input value={reportStackNo} onChange={(event) => setReportStackNo(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Reg. Code</span>
+                        <input value={reportRegistrationCode} onChange={(event) => setReportRegistrationCode(event.target.value)} />
+                      </label>
+                      <label>
+                        <span>Report Mode</span>
+                        <select value={reportMode} onChange={(event) => setReportMode(event.target.value as ReportMode)}>
+                          <option value="ALL">Accepted + Discrepancy</option>
+                          <option value="ACCEPTED_ONLY">Accepted Only</option>
+                          <option value="DISCREPANCY_ONLY">Discrepancy Only</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
                 </div>
                 <div className="actionsFooter">
                   <button className="primaryButton" onClick={previewReportModule} type="button">
@@ -5431,6 +6606,290 @@ export default function HomePage() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeView === "commission" && (
+            <div className="contentStack">
+              <section className="panel twoColumn">
+                <article className="infoCard">
+                  <div className="panelHeader">
+                    <h3>{editingOrganizerId ? "Edit Organizer" : "Organizer Master"}</h3>
+                    <span>One farmer can be linked with one organizer only</span>
+                  </div>
+                  <div className="formGrid">
+                    <label>
+                      <span>Organizer Name</span>
+                      <input
+                        value={newOrganizerName}
+                        onChange={(event) => setNewOrganizerName(event.target.value)}
+                        placeholder="Organizer name"
+                      />
+                    </label>
+                    <label>
+                      <span>Mobile</span>
+                      <input
+                        value={newOrganizerMobile}
+                        onChange={(event) => setNewOrganizerMobile(event.target.value)}
+                        placeholder="Mobile no."
+                      />
+                    </label>
+                    <label>
+                      <span>Village</span>
+                      <input
+                        value={newOrganizerVillage}
+                        onChange={(event) => setNewOrganizerVillage(event.target.value)}
+                        placeholder="Village"
+                      />
+                    </label>
+                    <label>
+                      <span>District</span>
+                      <input
+                        value={newOrganizerDistrict}
+                        onChange={(event) => setNewOrganizerDistrict(event.target.value)}
+                        placeholder="District"
+                      />
+                    </label>
+                    <label>
+                      <span>Commission Rate / QTL</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={newOrganizerRate}
+                        onChange={(event) => setNewOrganizerRate(event.target.value)}
+                        placeholder="0.00"
+                      />
+                    </label>
+                    <label>
+                      <span>Deduction Amount</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={newOrganizerDeduction}
+                        onChange={(event) => setNewOrganizerDeduction(event.target.value)}
+                        placeholder="0.00"
+                      />
+                    </label>
+                    <label className="checkboxRow">
+                      <input
+                        type="checkbox"
+                        checked={newOrganizerActive}
+                        onChange={(event) => setNewOrganizerActive(event.target.checked)}
+                      />
+                      <span>Active Organizer</span>
+                    </label>
+                  </div>
+                  <div className="actionsFooter">
+                    <button className="primaryButton" onClick={saveOrganizer} type="button">
+                      {editingOrganizerId ? "Update Organizer" : "Create Organizer"}
+                    </button>
+                    <button className="ghostButton" onClick={resetOrganizerForm} type="button">
+                      Reset
+                    </button>
+                  </div>
+                </article>
+
+                <article className="infoCard">
+                  <div className="panelHeader">
+                    <h3>Assignment Control</h3>
+                    <span>Registration-wise organizer mapping</span>
+                  </div>
+                  {organizerAssignmentRegistration ? (
+                    <>
+                      <div className="selectedCard">
+                        <strong>{organizerAssignmentRegistration.cropRegistrationCode}</strong>
+                        <span>{organizerAssignmentRegistration.farmerName}</span>
+                        <span>
+                          Current Organizer: {organizerAssignmentRegistration.organizerName || "Not linked"}
+                        </span>
+                      </div>
+                      <div className="formGrid">
+                        <label className="spanTwo">
+                          <span>Select Organizer</span>
+                          <select
+                            value={organizerAssignmentOrganizerId}
+                            onChange={(event) => setOrganizerAssignmentOrganizerId(event.target.value)}
+                          >
+                            <option value="">No Organizer Linked</option>
+                            {organizers
+                              .filter((item) => item.isActive)
+                              .map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name} ({formatNumber(item.commissionRatePerQtl)}/QTL)
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="actionsFooter">
+                        <button className="primaryButton" onClick={saveOrganizerAssignment} type="button">
+                          Save Mapping
+                        </button>
+                        <button className="ghostButton" onClick={closeOrganizerAssignment} type="button">
+                          Close
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p>Select any farmer from Registration Master and click `Organizer` to link the farmer.</p>
+                  )}
+                </article>
+              </section>
+
+              <section className="panel">
+                <div className="panelHeader">
+                  <h3>Organizer Commission Register</h3>
+                  <span>{organizerCommissionRows.length} organizer(s)</span>
+                </div>
+                <div className="filtersBar">
+                  <input
+                    placeholder="Search organizer, mobile, village, or district"
+                    value={organizerSearch}
+                    onChange={(event) => setOrganizerSearch(event.target.value)}
+                  />
+                  <select
+                    value={organizerDistrictFilter}
+                    onChange={(event) => setOrganizerDistrictFilter(event.target.value)}
+                  >
+                    <option value="">All Districts</option>
+                    {organizerDistrictOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="tableWrap">
+                  <table className="registrationTable compactTable">
+                    <thead>
+                      <tr>
+                        <th>Organizer</th>
+                        <th>District</th>
+                        <th>Farmers</th>
+                        <th>Total Intake</th>
+                        <th>Rate / QTL</th>
+                        <th>Gross Commission</th>
+                        <th>Deduction</th>
+                        <th>Net Payable</th>
+                        <th>Paid</th>
+                        <th>Balance</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {organizerCommissionRows.length ? (
+                        organizerCommissionRows.map((row) => (
+                          <tr key={row.organizer.id}>
+                            <td>
+                              <strong>{row.organizer.name}</strong>
+                              <div>{row.organizer.mobile || "-"}</div>
+                            </td>
+                            <td>{row.organizer.district || "-"}</td>
+                            <td>{row.farmerCount}</td>
+                            <td>{formatNumber(row.totalIntakeQtl)} QTL</td>
+                            <td>{formatNumber(row.ratePerQtl)}</td>
+                            <td>{formatNumber(row.grossCommissionAmount)}</td>
+                            <td>{formatNumber(row.deductionAmount)}</td>
+                            <td>{formatNumber(row.netPayableAmount)}</td>
+                            <td>{formatNumber(row.paidAmount)}</td>
+                            <td>{formatNumber(row.balanceAmount)}</td>
+                            <td>
+                              <span className={`status ${row.balanceAmount <= 0 ? "full" : "active"}`}>
+                                {row.balanceAmount <= 0 ? "SETTLED" : row.paidAmount > 0 ? "PART PAID" : "PENDING"}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="inlineActionRow">
+                                <button
+                                  className="smallButton"
+                                  type="button"
+                                  onClick={() => openOrganizerLedger(row.organizer.id)}
+                                >
+                                  Ledger View
+                                </button>
+                                <button
+                                  className="smallButton"
+                                  type="button"
+                                  onClick={() => downloadOrganizerCommissionVoucherPdf(row)}
+                                >
+                                  Download Voucher
+                                </button>
+                                <button
+                                  className="smallButton"
+                                  type="button"
+                                  onClick={() => openOrganizerForEdit(row.organizer)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="smallButton"
+                                  type="button"
+                                  onClick={() => deleteOrganizer(row.organizer)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={12} className="emptyStateCell">
+                            No organizer commission records available.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panelHeader">
+                  <h3>Organizer Master Register</h3>
+                  <span>{filteredOrganizerMasterRows.length} record(s)</span>
+                </div>
+                <div className="tableWrap">
+                  <table className="registrationTable compactTable">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Mobile</th>
+                        <th>Village</th>
+                        <th>District</th>
+                        <th>Rate / QTL</th>
+                        <th>Deduction</th>
+                        <th>Status</th>
+                        <th>Linked Farmers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOrganizerMasterRows.map((organizer) => {
+                        const linkedCount = registrations.filter((item) => item.organizerId === organizer.id).length;
+                        return (
+                          <tr key={organizer.id}>
+                            <td>{organizer.name}</td>
+                            <td>{organizer.mobile || "-"}</td>
+                            <td>{organizer.village || "-"}</td>
+                            <td>{organizer.district || "-"}</td>
+                            <td>{formatNumber(organizer.commissionRatePerQtl)}</td>
+                            <td>{formatNumber(organizer.deductionAmount ?? 0)}</td>
+                            <td>
+                              <span className={`status ${organizer.isActive ? "active" : "blocked"}`}>
+                                {organizer.isActive ? "ACTIVE" : "INACTIVE"}
+                              </span>
+                            </td>
+                            <td>{linkedCount}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -6482,6 +7941,338 @@ export default function HomePage() {
                     ) : (
                       <tr>
                         <td colSpan={7}>No payments recorded yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {organizerAssignmentRegistration ? (
+        <div className="modalOverlay" onClick={closeOrganizerAssignment} role="presentation">
+          <div
+            className="modalCard"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="panelHeader">
+              <h3>Organizer Assignment</h3>
+              <button className="ghostButton" onClick={closeOrganizerAssignment} type="button">
+                Close
+              </button>
+            </div>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Farmer Registration</h3>
+                <span>One farmer can be linked with one organizer only</span>
+              </div>
+              <div className="selectedCard">
+                <strong>{organizerAssignmentRegistration.cropRegistrationCode}</strong>
+                <span>{organizerAssignmentRegistration.farmerName}</span>
+                <span>
+                  {organizerAssignmentRegistration.village || "-"},{" "}
+                  {organizerAssignmentRegistration.district || "-"}
+                </span>
+                <span>
+                  Current Organizer: {organizerAssignmentRegistration.organizerName || "Not linked"}
+                </span>
+                <span>
+                  Intake Received: {formatNumber(Number(organizerAssignmentRegistration.totalReceivedQtl ?? 0))} QTL
+                </span>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Link Organizer</h3>
+                <span>Commission will apply at fixed organizer rate per QTL</span>
+              </div>
+              <div className="formGrid">
+                <label className="spanTwo">
+                  <span>Select Organizer</span>
+                  <select
+                    value={organizerAssignmentOrganizerId}
+                    onChange={(event) => setOrganizerAssignmentOrganizerId(event.target.value)}
+                  >
+                    <option value="">No Organizer Linked</option>
+                    {organizers
+                      .filter((item) => item.isActive)
+                      .slice()
+                      .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} | {item.village || "-"}, {item.district || "-"} |{" "}
+                          {formatNumber(item.commissionRatePerQtl)}/QTL
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+              <div className="actionsFooter">
+                <button className="primaryButton" onClick={saveOrganizerAssignment} type="button">
+                  Save Mapping
+                </button>
+                <button className="secondaryButton" onClick={closeOrganizerAssignment} type="button">
+                  Cancel
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {organizerLedgerSummary ? (
+        <div className="modalOverlay" onClick={closeOrganizerLedger} role="presentation">
+          <div
+            className="modalCard"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="panelHeader">
+              <h3>Organizer Commission Ledger</h3>
+              <button className="ghostButton" onClick={closeOrganizerLedger} type="button">
+                Close
+              </button>
+            </div>
+
+            <section className="panel metricsPanel">
+              <div className="metricBox">
+                <span>Organizer</span>
+                <strong>{organizerLedgerSummary.organizer.name}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Linked Farmers</span>
+                <strong>{organizerLedgerSummary.farmerCount}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Total Intake</span>
+                <strong>{formatNumber(organizerLedgerSummary.totalIntakeQtl)} QTL</strong>
+              </div>
+              <div className="metricBox">
+                <span>Rate / QTL</span>
+                <strong>{formatNumber(organizerLedgerSummary.ratePerQtl)}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Gross Commission</span>
+                <strong>{formatNumber(organizerLedgerSummary.grossCommissionAmount)}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Deduction</span>
+                <strong>{formatNumber(organizerLedgerSummary.deductionAmount)}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Net Payable</span>
+                <strong>{formatNumber(organizerLedgerSummary.netPayableAmount)}</strong>
+              </div>
+              <div className="metricBox">
+                <span>Balance</span>
+                <strong>{formatNumber(organizerLedgerSummary.balanceAmount)}</strong>
+              </div>
+            </section>
+
+            <section className="panel twoColumn">
+              <article className="infoCard">
+                <div className="panelHeader">
+                  <h3>Organizer Summary</h3>
+                  <span>{organizerLedgerSummary.organizer.district || "District not set"}</span>
+                </div>
+                <div className="selectedCard">
+                  <strong>{organizerLedgerSummary.organizer.name}</strong>
+                  <span>Mobile: {organizerLedgerSummary.organizer.mobile || "-"}</span>
+                  <span>
+                    Village: {organizerLedgerSummary.organizer.village || "-"} | District:{" "}
+                    {organizerLedgerSummary.organizer.district || "-"}
+                  </span>
+                  <span>
+                    Deduction {formatNumber(organizerLedgerSummary.deductionAmount)} | Net Payable{" "}
+                    {formatNumber(organizerLedgerSummary.netPayableAmount)}
+                  </span>
+                  <span>
+                    Paid {formatNumber(organizerLedgerSummary.paidAmount)} | Payment Entries{" "}
+                    {organizerLedgerSummary.paymentCount}
+                  </span>
+                </div>
+                <div className="tableWrap">
+                  <table className="registrationTable compactTable">
+                    <thead>
+                      <tr>
+                        <th>Reg. Code</th>
+                        <th>Farmer</th>
+                        <th>Village</th>
+                        <th>Received</th>
+                        <th>Commission</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {organizerLedgerSummary.linkedRegistrations.length ? (
+                        organizerLedgerSummary.linkedRegistrations
+                          .slice()
+                          .sort((left, right) =>
+                            left.cropRegistrationCode.localeCompare(right.cropRegistrationCode, "en", {
+                              sensitivity: "base"
+                            })
+                          )
+                          .map((registration) => (
+                            <tr key={registration.id}>
+                              <td>{registration.cropRegistrationCode}</td>
+                              <td>{registration.farmerName}</td>
+                              <td>{registration.village || "-"}</td>
+                              <td>{formatNumber(Number(registration.totalReceivedQtl ?? 0))} QTL</td>
+                              <td>
+                                {formatNumber(
+                                  roundQtl(
+                                    Number(registration.totalReceivedQtl ?? 0) *
+                                      Number(
+                                        registration.organizerCommissionRatePerQtl ??
+                                          organizerLedgerSummary.ratePerQtl
+                                      )
+                                  )
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="emptyStateCell">
+                            No farmer is linked to this organizer yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="infoCard">
+                <div className="panelHeader">
+                  <h3>{editingOrganizerPaymentId ? "Edit Commission Payment" : "Record Commission Payment"}</h3>
+                  <span>Fixed commission rate per QTL</span>
+                </div>
+                <div className="formGrid">
+                  <label>
+                    <span>Payment Date</span>
+                    <input
+                      type="date"
+                      value={organizerPaymentDate}
+                      onChange={(event) => setOrganizerPaymentDate(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Amount</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={organizerPaymentAmount}
+                      onChange={(event) => setOrganizerPaymentAmount(event.target.value)}
+                    />
+                  </label>
+                  <label className="spanTwo">
+                    <span>Transaction No.</span>
+                    <input
+                      value={organizerPaymentTransactionNo}
+                      onChange={(event) => setOrganizerPaymentTransactionNo(event.target.value)}
+                      placeholder="UTR / bank transaction no."
+                    />
+                  </label>
+                  <label className="spanTwo">
+                    <span>Remarks</span>
+                    <input
+                      value={organizerPaymentRemarks}
+                      onChange={(event) => setOrganizerPaymentRemarks(event.target.value)}
+                      placeholder="Optional remarks"
+                    />
+                  </label>
+                </div>
+                <div className="actionsFooter">
+                  <button className="primaryButton" onClick={saveOrganizerPayment} type="button">
+                    {editingOrganizerPaymentId ? "Update Payment" : "Add Payment"}
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    onClick={() => downloadOrganizerCommissionVoucherPdf(organizerLedgerSummary)}
+                    type="button"
+                  >
+                    Download Voucher
+                  </button>
+                  {editingOrganizerPaymentId ? (
+                    <button
+                      className="secondaryButton"
+                      onClick={() => {
+                        setEditingOrganizerPaymentId("");
+                        setOrganizerPaymentDate(new Date().toISOString().slice(0, 10));
+                        setOrganizerPaymentAmount("");
+                        setOrganizerPaymentTransactionNo("");
+                        setOrganizerPaymentRemarks("");
+                      }}
+                      type="button"
+                    >
+                      Cancel Edit
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            </section>
+
+            <section className="panel">
+              <div className="panelHeader">
+                <h3>Commission Payment History</h3>
+                <span>{organizerLedgerPayments.length} payment(s)</span>
+              </div>
+              <div className="tableWrap">
+                <table className="registrationTable compactTable">
+                  <thead>
+                    <tr>
+                      <th>S.No.</th>
+                      <th>Date</th>
+                      <th>Transaction No.</th>
+                      <th>Amount</th>
+                      <th>Remarks</th>
+                      <th>Entered By</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {organizerLedgerPayments.length ? (
+                      organizerLedgerPayments.map((payment, index) => (
+                        <tr key={payment.id}>
+                          <td>{index + 1}</td>
+                          <td>{formatDateDisplay(payment.paymentDate)}</td>
+                          <td>{payment.transactionNo}</td>
+                          <td>{formatNumber(Number(payment.amount ?? 0))}</td>
+                          <td>{payment.remarks || "-"}</td>
+                          <td>{payment.createdBy || "-"}</td>
+                          <td>
+                            <div className="inlineActionRow">
+                              <button
+                                className="smallButton"
+                                onClick={() => beginEditOrganizerPayment(payment)}
+                                type="button"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="smallButton"
+                                onClick={() => deleteOrganizerPayment(payment)}
+                                type="button"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="emptyStateCell">
+                          No organizer commission payment recorded yet.
+                        </td>
                       </tr>
                     )}
                   </tbody>

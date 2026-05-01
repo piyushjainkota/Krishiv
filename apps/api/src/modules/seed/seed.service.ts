@@ -6,8 +6,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 import * as XLSX from "xlsx";
 import type {
+  AddOrganizerPaymentInput,
   AddFinancialVoucherPaymentInput,
+  AssignRegistrationOrganizerInput,
   BackupDatabaseInput,
+  CreateOrganizerInput,
   CreateDiscrepancyShiftInput,
   CreateFinancialVoucherInput,
   CreateGodownInput,
@@ -18,6 +21,8 @@ import type {
   LoginInput,
   ReportFilterInput,
   RestoreDatabaseInput,
+  UpdateOrganizerInput,
+  UpdateOrganizerPaymentInput,
   UpdateFinancialVoucherPaymentInput,
   UpdateFinancialVoucherInput,
   UpdateReceiptInput
@@ -33,6 +38,8 @@ import {
   ImportBatchModel,
   LotModel,
   NonCertificationStockMovementModel,
+  OrganizerModel,
+  OrganizerPaymentModel,
   ReceiptModel,
   RegistrationModel,
   StackModel,
@@ -126,6 +133,18 @@ type RegistrationRecord = ImportRegistrationsInput["registrations"][number];
 
 function roundQtl(value: number): number {
   return Number(value.toFixed(2));
+}
+
+function normalizeOrganizerName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildCaseInsensitiveExactRegex(value: string): RegExp {
+  return new RegExp(`^${escapeRegex(value)}$`, "i");
 }
 
 function calculateNetWeightQtl(grossWeightQtl: number, noOfBags: number) {
@@ -401,6 +420,29 @@ type FinancialVoucherPreview = {
 
 type FinancialVoucherRecord = FinancialVoucherPreview;
 
+type OrganizerRecord = {
+  id: string;
+  name: string;
+  mobile?: string;
+  village?: string;
+  district?: string;
+  commissionRatePerQtl: number;
+  deductionAmount?: number;
+  isActive: boolean;
+};
+
+type OrganizerPaymentRecord = {
+  id: string;
+  organizerId: string;
+  organizerName: string;
+  paymentDate: string;
+  amount: number;
+  transactionNo: string;
+  remarks: string;
+  createdBy?: string;
+  updatedBy?: string;
+};
+
 function containsText(value: string | undefined, filterValue: string | undefined) {
   if (!filterValue?.trim()) {
     return true;
@@ -667,6 +709,55 @@ export class SeedService {
     }
   }
 
+  private assertOrganizerPaymentEditable(
+    payment: { createdBy?: string },
+    actor: ActorUser
+  ) {
+    const paymentCreator = String(payment.createdBy ?? "").trim().toLowerCase();
+    if (actor.role !== "ADMIN" && paymentCreator && paymentCreator !== actor.email.trim().toLowerCase()) {
+      throw new Error("Only the original commission entry user or admin can edit this commission payment.");
+    }
+  }
+
+  private async getOrganizerCommissionPosition(organizerId: string, excludedPaymentId = "") {
+    const [organizer, linkedRegistrations, organizerPayments] = await Promise.all([
+      OrganizerModel.findOne({ id: organizerId })
+        .select({ deductionAmount: 1 })
+        .lean<{ deductionAmount?: number } | null>(),
+      RegistrationModel.find({ organizerId }).select({
+        totalReceivedQtl: 1,
+        organizerCommissionRatePerQtl: 1
+      }).lean<Array<{ totalReceivedQtl?: number; organizerCommissionRatePerQtl?: number }>>(),
+      OrganizerPaymentModel.find(
+        excludedPaymentId ? { organizerId, id: { $ne: excludedPaymentId } } : { organizerId }
+      )
+        .select({ amount: 1 })
+        .lean<Array<{ amount?: number }>>()
+    ]);
+
+    const payableAmount = roundQtl(
+      linkedRegistrations.reduce(
+        (sum, item) =>
+          sum +
+          Number(item.totalReceivedQtl ?? 0) * Number(item.organizerCommissionRatePerQtl ?? 0),
+        0
+      )
+    );
+    const deductionAmount = roundQtl(Number(organizer?.deductionAmount ?? 0));
+    const netPayableAmount = roundQtl(payableAmount - deductionAmount);
+    const paidAmount = roundQtl(
+      organizerPayments.reduce((sum, item) => sum + Number(item.amount ?? 0), 0)
+    );
+
+    return {
+      payableAmount,
+      deductionAmount,
+      netPayableAmount,
+      paidAmount,
+      balanceAmount: roundQtl(netPayableAmount - paidAmount)
+    };
+  }
+
   async loginUser(input: LoginInput) {
     await this.ensureCompatibility();
     const user = await this.findActiveUser(input.email);
@@ -826,16 +917,18 @@ export class SeedService {
       await StackModel.insertMany(defaultStacks);
     }
 
-    const [registrations, godowns, stacks] = await Promise.all([
+    const [registrations, godowns, stacks, organizers] = await Promise.all([
       RegistrationModel.find().sort({ cropRegistrationCode: 1 }).lean(),
       GodownModel.find().sort({ name: 1 }).lean(),
-      StackModel.find().sort({ stackNo: 1 }).lean()
+      StackModel.find().sort({ stackNo: 1 }).lean(),
+      OrganizerModel.find().sort({ name: 1 }).lean()
     ]);
 
     return {
       registrations,
       godowns,
       stacks,
+      organizers,
       features: {
         discrepancyWorkflow: config.enableDiscrepancyWorkflow
       }
@@ -844,12 +937,13 @@ export class SeedService {
 
   async bootstrapOperational() {
     await this.ensureCompatibility();
-    const [lots, receipts, discrepancies, discrepancyShifts, financialVouchers] = await Promise.all([
+    const [lots, receipts, discrepancies, discrepancyShifts, financialVouchers, organizerPayments] = await Promise.all([
       LotModel.find().sort({ lotCode: 1 }).lean(),
       ReceiptModel.find().sort({ createdAt: -1 }).lean(),
       DiscrepancyModel.find().sort({ createdAt: -1 }).lean(),
       DiscrepancyShiftModel.find().sort({ createdAt: -1 }).lean(),
-      FinancialVoucherModel.find().sort({ createdAt: -1 }).lean()
+      FinancialVoucherModel.find().sort({ createdAt: -1 }).lean(),
+      OrganizerPaymentModel.find().sort({ paymentDate: -1, createdAt: -1 }).lean()
     ]);
 
     return {
@@ -858,6 +952,7 @@ export class SeedService {
       discrepancies,
       discrepancyShifts,
       financialVouchers,
+      organizerPayments,
       features: {
         discrepancyWorkflow: config.enableDiscrepancyWorkflow
       }
@@ -883,7 +978,10 @@ export class SeedService {
         seasonKey: 1,
         cropRegistrationCode: 1,
         totalReceivedQtl: 1,
-        status: 1
+        status: 1,
+        organizerId: 1,
+        organizerName: 1,
+        organizerCommissionRatePerQtl: 1
       }
     ).lean();
 
@@ -927,6 +1025,11 @@ export class SeedService {
                 id: existing?.id ?? registration.id,
                 totalReceivedQtl: preservedReceivedQtl,
                 balanceQtl,
+                organizerId: String(existing?.organizerId ?? registration.organizerId ?? ""),
+                organizerName: String(existing?.organizerName ?? registration.organizerName ?? ""),
+                organizerCommissionRatePerQtl: roundQtl(
+                  Number(existing?.organizerCommissionRatePerQtl ?? registration.organizerCommissionRatePerQtl ?? 0)
+                ),
                 status,
                 sourceImportId: importBatch._id
               }
@@ -993,6 +1096,210 @@ export class SeedService {
     });
 
     return stack.toObject();
+  }
+
+  async createOrganizer(input: CreateOrganizerInput) {
+    await this.ensureCompatibility();
+    const normalizedName = normalizeOrganizerName(input.name);
+    const existing = await OrganizerModel.findOne({
+      name: buildCaseInsensitiveExactRegex(normalizedName)
+    }).lean();
+    if (existing) {
+      throw new Error(`Organizer ${normalizedName} already exists.`);
+    }
+
+    const organizer = await OrganizerModel.create({
+      id: randomUUID(),
+      name: normalizedName,
+      mobile: input.mobile.trim(),
+      village: input.village.trim(),
+      district: input.district.trim(),
+      commissionRatePerQtl: roundQtl(Number(input.commissionRatePerQtl ?? 0)),
+      deductionAmount: roundQtl(Number(input.deductionAmount ?? 0)),
+      isActive: Boolean(input.isActive)
+    });
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER",
+      entityId: organizer.id,
+      action: "CREATED",
+      payload: organizer.toObject()
+    });
+
+    return organizer.toObject();
+  }
+
+  async updateOrganizer(organizerId: string, input: UpdateOrganizerInput) {
+    await this.ensureCompatibility();
+    const existing = await OrganizerModel.findOne({ id: organizerId }).lean<OrganizerRecord | null>();
+    if (!existing) {
+      throw new Error("Organizer not found.");
+    }
+
+    const normalizedName = normalizeOrganizerName(input.name);
+    const duplicate = await OrganizerModel.findOne({
+      id: { $ne: organizerId },
+      name: buildCaseInsensitiveExactRegex(normalizedName)
+    }).lean();
+    if (duplicate) {
+      throw new Error(`Organizer ${normalizedName} already exists.`);
+    }
+
+    const nextOrganizer = {
+      name: normalizedName,
+      mobile: input.mobile.trim(),
+      village: input.village.trim(),
+      district: input.district.trim(),
+      commissionRatePerQtl: roundQtl(Number(input.commissionRatePerQtl ?? 0)),
+      deductionAmount: roundQtl(Number(input.deductionAmount ?? 0)),
+      isActive: Boolean(input.isActive)
+    };
+
+    await OrganizerModel.updateOne(
+      { id: organizerId },
+      {
+        $set: nextOrganizer
+      }
+    );
+
+    await RegistrationModel.updateMany(
+      { organizerId },
+      {
+        $set: {
+          organizerName: nextOrganizer.name,
+          organizerCommissionRatePerQtl: nextOrganizer.commissionRatePerQtl
+        }
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER",
+      entityId: organizerId,
+      action: "UPDATED",
+      payload: {
+        before: existing,
+        after: {
+          ...existing,
+          ...nextOrganizer
+        }
+      }
+    });
+
+    return {
+      id: organizerId,
+      ...nextOrganizer
+    };
+  }
+
+  async deleteOrganizer(organizerId: string) {
+    await this.ensureCompatibility();
+    const existing = await OrganizerModel.findOne({ id: organizerId }).lean<OrganizerRecord | null>();
+    if (!existing) {
+      throw new Error("Organizer not found.");
+    }
+
+    const linkedRegistrations = await RegistrationModel.countDocuments({ organizerId });
+    if (linkedRegistrations > 0) {
+      throw new Error("Organizer is linked with farmer registrations. Remove mapping first.");
+    }
+
+    const paymentCount = await OrganizerPaymentModel.countDocuments({ organizerId });
+    if (paymentCount > 0) {
+      throw new Error("Organizer payment entries exist for this organizer. Delete is blocked.");
+    }
+
+    await OrganizerModel.deleteOne({ id: organizerId });
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER",
+      entityId: organizerId,
+      action: "DELETED",
+      payload: existing
+    });
+
+    return { success: true };
+  }
+
+  async assignOrganizerToRegistration(registrationId: string, input: AssignRegistrationOrganizerInput) {
+    await this.ensureCompatibility();
+    const registration = await RegistrationModel.findOne({ id: registrationId }).lean<
+      (RegistrationRecord & {
+        organizerId?: string;
+        organizerName?: string;
+        organizerCommissionRatePerQtl?: number;
+      }) | null
+    >();
+    if (!registration) {
+      throw new Error("Registration not found.");
+    }
+
+    const organizerId = String(input.organizerId ?? "").trim();
+    const existingSnapshot = {
+      organizerId: String(registration.organizerId ?? ""),
+      organizerName: String(registration.organizerName ?? ""),
+      organizerCommissionRatePerQtl: roundQtl(Number(registration.organizerCommissionRatePerQtl ?? 0))
+    };
+
+    if (!organizerId) {
+      await RegistrationModel.updateOne(
+        { id: registrationId },
+        {
+          $set: {
+            organizerId: "",
+            organizerName: "",
+            organizerCommissionRatePerQtl: 0
+          }
+        }
+      );
+
+      await AuditLogModel.create({
+        entityType: "REGISTRATION_ORGANIZER",
+        entityId: registrationId,
+        action: "CLEARED",
+        payload: {
+          cropRegistrationCode: registration.cropRegistrationCode,
+          before: existingSnapshot
+        }
+      });
+
+      return { success: true };
+    }
+
+    const organizer = await OrganizerModel.findOne({ id: organizerId }).lean<OrganizerRecord | null>();
+    if (!organizer) {
+      throw new Error("Selected organizer not found.");
+    }
+    if (!organizer.isActive) {
+      throw new Error("Selected organizer is inactive.");
+    }
+
+    await RegistrationModel.updateOne(
+      { id: registrationId },
+      {
+        $set: {
+          organizerId: organizer.id,
+          organizerName: organizer.name,
+          organizerCommissionRatePerQtl: roundQtl(Number(organizer.commissionRatePerQtl ?? 0))
+        }
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "REGISTRATION_ORGANIZER",
+      entityId: registrationId,
+      action: "ASSIGNED",
+      payload: {
+        cropRegistrationCode: registration.cropRegistrationCode,
+        before: existingSnapshot,
+        after: {
+          organizerId: organizer.id,
+          organizerName: organizer.name,
+          organizerCommissionRatePerQtl: roundQtl(Number(organizer.commissionRatePerQtl ?? 0))
+        }
+      }
+    });
+
+    return { success: true };
   }
 
   private async ensureStack(godownId: string, stackNo: string, session?: ClientSession | null) {
@@ -2487,6 +2794,141 @@ export class SeedService {
     });
 
     return this.bootstrap();
+  }
+
+  async addOrganizerPayment(input: AddOrganizerPaymentInput, actor: ActorUser) {
+    await this.ensureCompatibility();
+    const organizer = await OrganizerModel.findOne({ id: input.organizerId }).lean<OrganizerRecord | null>();
+    if (!organizer) {
+      throw new Error("Organizer not found.");
+    }
+
+    const transactionNo = input.transactionNo.trim().toUpperCase();
+    if (!transactionNo) {
+      throw new Error("Transaction number is required.");
+    }
+
+    const duplicatePayment = await OrganizerPaymentModel.findOne({ transactionNo }).lean();
+    if (duplicatePayment) {
+      throw new Error(`Transaction number ${transactionNo} already exists in organizer commission payments.`);
+    }
+
+    const commissionPosition = await this.getOrganizerCommissionPosition(organizer.id);
+    if (commissionPosition.balanceAmount <= 0) {
+      throw new Error("No organizer commission balance is pending for payment.");
+    }
+    const requestedAmount = roundQtl(Number(input.amount ?? 0));
+    if (requestedAmount > commissionPosition.balanceAmount) {
+      throw new Error(
+        `Commission payment exceeds pending balance. Pending balance is ${commissionPosition.balanceAmount.toFixed(2)}.`
+      );
+    }
+
+    const payment = await OrganizerPaymentModel.create({
+      id: randomUUID(),
+      organizerId: organizer.id,
+      organizerName: organizer.name,
+      paymentDate: input.paymentDate,
+      amount: requestedAmount,
+      transactionNo,
+      remarks: input.remarks?.trim() ?? "",
+      createdBy: actor.email,
+      updatedBy: actor.email
+    });
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER_COMMISSION_PAYMENT",
+      entityId: payment.id,
+      action: "CREATED",
+      payload: payment.toObject()
+    });
+
+    return payment.toObject();
+  }
+
+  async updateOrganizerPayment(paymentId: string, input: UpdateOrganizerPaymentInput, actor: ActorUser) {
+    await this.ensureCompatibility();
+    const existingPayment = await OrganizerPaymentModel.findOne({ id: paymentId }).lean<OrganizerPaymentRecord | null>();
+    if (!existingPayment) {
+      throw new Error("Organizer commission payment not found.");
+    }
+
+    this.assertOrganizerPaymentEditable(existingPayment, actor);
+
+    const transactionNo = input.transactionNo.trim().toUpperCase();
+    if (!transactionNo) {
+      throw new Error("Transaction number is required.");
+    }
+
+    const duplicatePayment = await OrganizerPaymentModel.findOne({
+      id: { $ne: paymentId },
+      transactionNo
+    }).lean();
+    if (duplicatePayment) {
+      throw new Error(`Transaction number ${transactionNo} already exists in organizer commission payments.`);
+    }
+
+    const commissionPosition = await this.getOrganizerCommissionPosition(existingPayment.organizerId, paymentId);
+    const requestedAmount = roundQtl(Number(input.amount ?? 0));
+    if (requestedAmount > commissionPosition.balanceAmount) {
+      throw new Error(
+        `Commission payment exceeds pending balance. Pending balance is ${commissionPosition.balanceAmount.toFixed(2)}.`
+      );
+    }
+
+    const nextPayment = {
+      paymentDate: input.paymentDate,
+      amount: requestedAmount,
+      transactionNo,
+      remarks: input.remarks?.trim() ?? "",
+      updatedBy: actor.email
+    };
+
+    await OrganizerPaymentModel.updateOne(
+      { id: paymentId },
+      {
+        $set: nextPayment
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER_COMMISSION_PAYMENT",
+      entityId: paymentId,
+      action: "UPDATED",
+      payload: {
+        before: existingPayment,
+        after: {
+          ...existingPayment,
+          ...nextPayment
+        }
+      }
+    });
+
+    return {
+      ...existingPayment,
+      ...nextPayment
+    };
+  }
+
+  async deleteOrganizerPayment(paymentId: string, actor: ActorUser) {
+    await this.ensureCompatibility();
+    const existingPayment = await OrganizerPaymentModel.findOne({ id: paymentId }).lean<OrganizerPaymentRecord | null>();
+    if (!existingPayment) {
+      throw new Error("Organizer commission payment not found.");
+    }
+
+    this.assertOrganizerPaymentEditable(existingPayment, actor);
+
+    await OrganizerPaymentModel.deleteOne({ id: paymentId });
+
+    await AuditLogModel.create({
+      entityType: "ORGANIZER_COMMISSION_PAYMENT",
+      entityId: paymentId,
+      action: "DELETED",
+      payload: existingPayment
+    });
+
+    return { success: true };
   }
 
   private async buildBaseReceiptRows(filters: ReportFilterInput) {

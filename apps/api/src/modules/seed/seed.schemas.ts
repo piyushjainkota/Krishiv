@@ -22,6 +22,9 @@ export const registrationSchema = z.object({
   allowedIntakeQtl: z.number(),
   totalReceivedQtl: z.number(),
   balanceQtl: z.number(),
+  organizerId: z.string().optional().default(""),
+  organizerName: z.string().optional().default(""),
+  organizerCommissionRatePerQtl: z.number().optional().default(0),
   status: z.enum(["ACTIVE", "BLOCKED", "CLOSED", "EXHAUSTED"]),
   sourceRowNumber: z.number()
 });
@@ -40,6 +43,22 @@ export const createGodownSchema = z.object({
 export const createStackSchema = z.object({
   godownId: z.string().min(1),
   stackNo: z.string().min(1)
+});
+
+export const createOrganizerSchema = z.object({
+  name: z.string().trim().min(1),
+  mobile: z.string().trim().optional().default(""),
+  village: z.string().trim().optional().default(""),
+  district: z.string().trim().optional().default(""),
+  commissionRatePerQtl: z.number().nonnegative(),
+  deductionAmount: z.number().nonnegative().optional().default(0),
+  isActive: z.boolean().optional().default(true)
+});
+
+export const updateOrganizerSchema = createOrganizerSchema;
+
+export const assignRegistrationOrganizerSchema = z.object({
+  organizerId: z.string().trim().optional().default("")
 });
 
 export const receiptLineSchema = z.object({
@@ -105,6 +124,21 @@ export const updateFinancialVoucherPaymentSchema = addFinancialVoucherPaymentSch
   adminPassword: z.string().optional().default("")
 });
 
+export const addOrganizerPaymentSchema = z.object({
+  organizerId: z.string().trim().min(1),
+  paymentDate: z.string().min(1),
+  amount: z.number().positive(),
+  transactionNo: z.string().trim().min(1),
+  remarks: z.string().optional().default("")
+});
+
+export const updateOrganizerPaymentSchema = z.object({
+  paymentDate: z.string().min(1),
+  amount: z.number().positive(),
+  transactionNo: z.string().trim().min(1),
+  remarks: z.string().optional().default("")
+});
+
 export const loginSchema = z.object({
   email: z.string().trim().min(1),
   password: z.string().min(1)
@@ -153,6 +187,9 @@ export const reportFilterSchema = z.object({
 export type ImportRegistrationsInput = z.infer<typeof importRegistrationsSchema>;
 export type CreateGodownInput = z.infer<typeof createGodownSchema>;
 export type CreateStackInput = z.infer<typeof createStackSchema>;
+export type CreateOrganizerInput = z.infer<typeof createOrganizerSchema>;
+export type UpdateOrganizerInput = z.infer<typeof updateOrganizerSchema>;
+export type AssignRegistrationOrganizerInput = z.infer<typeof assignRegistrationOrganizerSchema>;
 export type CreateReceiptInput = z.infer<typeof createReceiptSchema>;
 export type UpdateReceiptInput = z.infer<typeof updateReceiptSchema>;
 export type CreateDiscrepancyShiftInput = z.infer<typeof createDiscrepancyShiftSchema>;
@@ -161,6 +198,8 @@ export type UpdateFinancialVoucherInput = z.infer<typeof updateFinancialVoucherS
 export type FinancialVoucherActionInput = z.infer<typeof financialVoucherActionSchema>;
 export type AddFinancialVoucherPaymentInput = z.infer<typeof addFinancialVoucherPaymentSchema>;
 export type UpdateFinancialVoucherPaymentInput = z.infer<typeof updateFinancialVoucherPaymentSchema>;
+export type AddOrganizerPaymentInput = z.infer<typeof addOrganizerPaymentSchema>;
+export type UpdateOrganizerPaymentInput = z.infer<typeof updateOrganizerPaymentSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type BackupDatabaseInput = z.infer<typeof backupDatabaseSchema>;
 export type RestoreDatabaseInput = z.infer<typeof restoreDatabaseSchema>;

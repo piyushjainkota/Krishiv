@@ -87,9 +87,26 @@ const RegistrationSchema = new Schema(
     allowedIntakeQtl: { type: Number, default: 0 },
     totalReceivedQtl: { type: Number, default: 0 },
     balanceQtl: { type: Number, default: 0 },
+    organizerId: { type: String, default: "", index: true },
+    organizerName: { type: String, default: "" },
+    organizerCommissionRatePerQtl: { type: Number, default: 0 },
     status: { type: String, enum: registrationStatusValues, required: true },
     sourceRowNumber: { type: Number, required: true },
     sourceImportId: { type: Schema.Types.ObjectId, ref: "ImportBatch" }
+  },
+  { timestamps: true }
+);
+
+const OrganizerSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    name: { type: String, required: true, unique: true },
+    mobile: { type: String, default: "" },
+    village: { type: String, default: "" },
+    district: { type: String, default: "" },
+    commissionRatePerQtl: { type: Number, required: true, default: 0 },
+    deductionAmount: { type: Number, required: true, default: 0 },
+    isActive: { type: Boolean, default: true }
   },
   { timestamps: true }
 );
@@ -264,6 +281,21 @@ const FinancialVoucherPaymentSchema = new Schema(
   { _id: false }
 );
 
+const OrganizerPaymentSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    organizerId: { type: String, required: true, index: true },
+    organizerName: { type: String, required: true },
+    paymentDate: { type: String, required: true },
+    amount: { type: Number, required: true },
+    transactionNo: { type: String, required: true, unique: true },
+    remarks: { type: String, default: "" },
+    createdBy: { type: String, default: "" },
+    updatedBy: { type: String, default: "" }
+  },
+  { timestamps: true }
+);
+
 const FinancialVoucherSchema = new Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -348,6 +380,8 @@ export const ImportBatchModel =
   mongoose.models.ImportBatch ?? mongoose.model("ImportBatch", ImportSchema);
 export const RegistrationModel =
   mongoose.models.Registration ?? mongoose.model("Registration", RegistrationSchema);
+export const OrganizerModel =
+  mongoose.models.Organizer ?? mongoose.model("Organizer", OrganizerSchema);
 export const GodownModel = mongoose.models.Godown ?? mongoose.model("Godown", GodownSchema);
 export const StackModel = mongoose.models.Stack ?? mongoose.model("Stack", StackSchema);
 export const LotModel = mongoose.models.Lot ?? mongoose.model("Lot", LotSchema);
@@ -365,3 +399,5 @@ export const NonCertificationStockMovementModel =
 export const FinancialVoucherModel =
   mongoose.models.FinancialVoucher ??
   mongoose.model("FinancialVoucher", FinancialVoucherSchema);
+export const OrganizerPaymentModel =
+  mongoose.models.OrganizerPayment ?? mongoose.model("OrganizerPayment", OrganizerPaymentSchema);

@@ -42,8 +42,22 @@ export interface RegistrationRecord {
   allowedIntakeQtl: number;
   totalReceivedQtl: number;
   balanceQtl: number;
+  organizerId?: string;
+  organizerName?: string;
+  organizerCommissionRatePerQtl?: number;
   status: RegistrationStatus;
   sourceRowNumber: number;
+}
+
+export interface Organizer {
+  id: string;
+  name: string;
+  mobile: string;
+  village: string;
+  district: string;
+  commissionRatePerQtl: number;
+  deductionAmount: number;
+  isActive: boolean;
 }
 
 export interface Godown {
@@ -166,6 +180,18 @@ export interface FinancialVoucherPayment {
   amount: number;
   transactionNo: string;
   mode: string;
+  remarks: string;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface OrganizerPayment {
+  id: string;
+  organizerId: string;
+  organizerName: string;
+  paymentDate: string;
+  amount: number;
+  transactionNo: string;
   remarks: string;
   createdBy?: string;
   updatedBy?: string;

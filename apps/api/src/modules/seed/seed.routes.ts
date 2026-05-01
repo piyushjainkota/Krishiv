@@ -1,10 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
+  addOrganizerPaymentSchema,
   addFinancialVoucherPaymentSchema,
+  assignRegistrationOrganizerSchema,
   backupDatabaseSchema,
   createDiscrepancyShiftSchema,
   createFinancialVoucherSchema,
   createGodownSchema,
+  createOrganizerSchema,
   createReceiptSchema,
   createStackSchema,
   financialVoucherActionSchema,
@@ -12,6 +15,8 @@ import {
   loginSchema,
   reportFilterSchema,
   restoreDatabaseSchema,
+  updateOrganizerPaymentSchema,
+  updateOrganizerSchema,
   updateFinancialVoucherPaymentSchema,
   updateFinancialVoucherSchema,
   updateReceiptSchema
@@ -111,6 +116,53 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       return reply.status(400).send(parsed.error.flatten());
     }
     return seedService.createStack(parsed.data);
+  });
+
+  app.post("/api/seed/masters/organizers", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = createOrganizerSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    return seedService.createOrganizer(parsed.data);
+  });
+
+  app.put("/api/seed/masters/organizers/:organizerId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = updateOrganizerSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const organizerId = String((request.params as { organizerId: string }).organizerId);
+    return seedService.updateOrganizer(organizerId, parsed.data);
+  });
+
+  app.delete("/api/seed/masters/organizers/:organizerId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const organizerId = String((request.params as { organizerId: string }).organizerId);
+    return seedService.deleteOrganizer(organizerId);
+  });
+
+  app.put("/api/seed/registrations/:registrationId/organizer", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = assignRegistrationOrganizerSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const registrationId = String((request.params as { registrationId: string }).registrationId);
+    return seedService.assignOrganizerToRegistration(registrationId, parsed.data);
   });
 
   app.post("/api/seed/intake/receipts", async (request, reply) => {
@@ -240,6 +292,49 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       user: { email: string; role: AppRole };
     };
     return seedService.updateFinancialVoucherPayment(params.voucherId, params.paymentId, parsed.data, actor.user);
+  });
+
+  app.post("/api/seed/organizer-payments", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = addOrganizerPaymentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+    };
+    return seedService.addOrganizerPayment(parsed.data, actor.user);
+  });
+
+  app.put("/api/seed/organizer-payments/:paymentId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = updateOrganizerPaymentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+    };
+    const paymentId = String((request.params as { paymentId: string }).paymentId);
+    return seedService.updateOrganizerPayment(paymentId, parsed.data, actor.user);
+  });
+
+  app.delete("/api/seed/organizer-payments/:paymentId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+    };
+    const paymentId = String((request.params as { paymentId: string }).paymentId);
+    return seedService.deleteOrganizerPayment(paymentId, actor.user);
   });
 
   app.post("/api/seed/reports/preview", async (request, reply) => {

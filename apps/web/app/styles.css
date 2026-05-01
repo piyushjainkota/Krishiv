@@ -25,6 +25,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 button,
@@ -41,16 +43,16 @@ table {
 th,
 td {
   border-bottom: 1px solid #eee7de;
-  padding: 12px 14px;
+  padding: 8px 10px;
   text-align: left;
-  font-size: 0.94rem;
+  font-size: 0.86rem;
   vertical-align: top;
 }
 
 .registrationTable th,
 .registrationTable td {
-  font-size: 0.86rem;
-  padding: 10px 10px;
+  font-size: 0.78rem;
+  padding: 7px 8px;
   white-space: nowrap;
 }
 
@@ -94,7 +96,7 @@ th {
 .topBar {
   background: linear-gradient(90deg, var(--brand-dark), var(--brand));
   color: white;
-  padding: 18px 24px;
+  padding: 12px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -135,17 +137,17 @@ th {
 
 .layout {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   min-height: calc(100vh - 78px);
 }
 
 .sidebar {
   background: var(--sidebar);
   border-right: 1px solid var(--line);
-  padding: 20px;
+  padding: 14px;
   display: grid;
   align-content: start;
-  gap: 20px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -205,7 +207,7 @@ th {
 
 .navSection {
   border: 1px solid rgba(123, 107, 93, 0.18);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.38);
   overflow: hidden;
 }
@@ -224,7 +226,7 @@ th {
 
 .navSectionButton {
   width: 100%;
-  padding: 11px 12px;
+  padding: 8px 9px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -250,10 +252,10 @@ th {
 
 .navSubButton {
   width: 100%;
-  padding: 10px 12px;
+  padding: 7px 9px;
   border-left: 3px solid transparent;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  border-radius: 6px;
+  font-size: 0.86rem;
 }
 
 .navSubButton.active {
@@ -279,7 +281,7 @@ th {
 .shiftPanel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 10px;
 }
 
 .sidebarCard {
@@ -323,18 +325,18 @@ th {
 .filtersBar input,
 .filtersBar select {
   width: 100%;
-  height: 42px;
+  height: 34px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0 12px;
+  border-radius: 7px;
+  padding: 0 9px;
   background: #fff;
 }
 
 .secondaryButton,
 .primaryButton {
-  height: 42px;
-  border-radius: 10px;
-  padding: 0 16px;
+  height: 34px;
+  border-radius: 7px;
+  padding: 0 12px;
   font-weight: 600;
 }
 
@@ -354,7 +356,7 @@ th {
 }
 
 .contentArea {
-  padding: 24px;
+  padding: 16px;
   min-width: 0;
 }
 
@@ -368,7 +370,7 @@ th {
 }
 
 .panel {
-  padding: 18px;
+  padding: 12px;
 }
 
 .panelHeader,
@@ -389,7 +391,7 @@ th {
 }
 
 .panelHeader {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .metricsPanel {
@@ -398,8 +400,8 @@ th {
 
 .dashboardHero {
   display: grid;
-  gap: 22px;
-  padding: 24px;
+  gap: 14px;
+  padding: 16px;
   background:
     linear-gradient(135deg, rgba(168, 104, 25, 0.08), rgba(84, 46, 15, 0.03)),
     var(--panel);
@@ -419,14 +421,14 @@ th {
 }
 
 .dashboardHeroStats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
 }
 
 .dashboardHeroCard,
 .dashboardProgressCard {
-  padding: 16px 18px;
+  padding: 11px 12px;
   border: 1px solid rgba(140, 105, 63, 0.18);
-  border-radius: 16px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.88);
 }
 
@@ -439,13 +441,13 @@ th {
 
 .dashboardHeroCard strong {
   display: block;
-  margin: 8px 0 4px;
-  font-size: 1.5rem;
+  margin: 5px 0 2px;
+  font-size: 1.08rem;
   color: var(--ink);
 }
 
 .dashboardProgressGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
 .dashboardProgress {
@@ -478,26 +480,26 @@ th {
 }
 
 .dashboardMetricsPanel {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .dashboardActionGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
 }
 
 .dashboardBoard {
   display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
 }
 
 .dashboardCard {
   min-width: 0;
   position: relative;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 14px;
   border: 1px solid rgba(116, 84, 46, 0.16);
-  box-shadow: 0 18px 34px rgba(84, 56, 26, 0.06);
+  box-shadow: 0 10px 20px rgba(84, 56, 26, 0.045);
   background:
     linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(255, 255, 255, 0.98)),
     var(--panel);
@@ -517,10 +519,10 @@ th {
 
 .dashboardCardHeader {
   align-items: flex-start;
-  gap: 16px;
-  padding-bottom: 14px;
+  gap: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #eadfce;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .dashboardCardHeader p {
@@ -542,7 +544,7 @@ th {
 
 .buttonGrid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -552,20 +554,20 @@ th {
 .compact,
 .detailGrid {
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 
 .metricBox {
-  padding: 16px;
+  padding: 10px;
   background: var(--panel-soft);
   border: 1px solid #efe7dd;
-  border-radius: 14px;
+  border-radius: 8px;
 }
 
 .metricBox strong {
   display: block;
-  margin-top: 8px;
-  font-size: 1.35rem;
+  margin-top: 5px;
+  font-size: 1.02rem;
 }
 
 .emptyStateCell {
