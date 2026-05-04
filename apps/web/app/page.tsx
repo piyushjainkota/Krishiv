@@ -19,6 +19,7 @@ import type {
   OrganizerPayment,
   RegistrationRecord,
   RolePermissions,
+  StackAccommodation,
   Stack
 } from "./mvp";
 import {
@@ -84,6 +85,17 @@ type OrganizerCommissionRow = {
 };
 
 type OrganizerDashboardRow = OrganizerCommissionRow & {
+  coveragePct: number;
+};
+
+type OrganizerPerformanceRow = {
+  organizerId: string;
+  organizerName: string;
+  district: string;
+  farmerCount: number;
+  expectedYieldQtl: number;
+  depositedQtl: number;
+  pendingQtl: number;
   coveragePct: number;
 };
 
@@ -188,6 +200,7 @@ type ReportType =
   | "SUMMARY"
   | "DAILY_INTAKE_REGISTER"
   | "CUSTOM_DATE_PAYMENT_REGISTER"
+  | "ORGANIZER_FARMER_PAYMENT_REGISTER"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
   | "STACK_WISE_STOCK_POSITION"
@@ -205,6 +218,47 @@ type ReportPreview = {
   totals: Record<string, string | number>;
   generatedAt: string;
   fileName: string;
+};
+
+type DashboardAssistantResult = {
+  title: string;
+  summary: string;
+  columns: string[];
+  rows: Record<string, string | number>[];
+};
+
+type AdjustedStackCardPreview = {
+  title: string;
+  godownName: string;
+  stackNo: string;
+  generatedAt: string;
+  fileName: string;
+  totalAccommodatedQtyQtl: number;
+  totalAccommodatedBags: number;
+  changedFarmerCount: number;
+  originalRows: {
+    regCode: string;
+    farmerName: string;
+    village: string;
+    district: string;
+    qtyQtl: number;
+    bags: number;
+  }[];
+    adjustedRows: {
+      regCode: string;
+      farmerName: string;
+      village: string;
+      district: string;
+    originalQtyQtl: number;
+    adjustedInQtyQtl: number;
+      adjustedOutQtyQtl: number;
+      finalQtyQtl: number;
+      originalBags: number;
+      adjustedInBags: number;
+      adjustedOutBags: number;
+      finalBags: number;
+      changed: boolean;
+    }[];
 };
 
 type PaymentRegisterRow = {
@@ -252,6 +306,7 @@ type OperationalBootstrapPayload = {
   lots: CertificationLot[];
   discrepancies: IntakeDiscrepancy[];
   discrepancyShifts: DiscrepancyShift[];
+  stackAccommodations: StackAccommodation[];
   financialVouchers: FinancialVoucher[];
   organizerPayments: OrganizerPayment[];
   receipts: IntakeReceipt[];
@@ -259,6 +314,9 @@ type OperationalBootstrapPayload = {
 };
 
 type FullBootstrapPayload = CoreBootstrapPayload & OperationalBootstrapPayload;
+type AppBootstrapPayload = FullBootstrapPayload & {
+  validationSummary?: unknown;
+};
 
 const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "GODOWN_WISE_DETAIL", label: "Godown Wise Detail" },
@@ -268,6 +326,7 @@ const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "SUMMARY", label: "Summary" },
   { value: "DAILY_INTAKE_REGISTER", label: "Daily Intake Register" },
   { value: "CUSTOM_DATE_PAYMENT_REGISTER", label: "Custom Date Payment Register" },
+  { value: "ORGANIZER_FARMER_PAYMENT_REGISTER", label: "Organizer Wise Farmer Payment" },
   { value: "REGISTRATION_PENDING_RECEIVED", label: "Registration Pending vs Received" },
   { value: "LOT_WISE_STOCK_LEDGER", label: "Lot-wise Stock Ledger" },
   { value: "STACK_WISE_STOCK_POSITION", label: "Stack-wise Stock Position" },
@@ -511,6 +570,7 @@ export default function HomePage() {
   const [lots, setLots] = useState<CertificationLot[]>([]);
   const [discrepancies, setDiscrepancies] = useState<IntakeDiscrepancy[]>([]);
   const [discrepancyShifts, setDiscrepancyShifts] = useState<DiscrepancyShift[]>([]);
+  const [stackAccommodations, setStackAccommodations] = useState<StackAccommodation[]>([]);
   const [financialVouchers, setFinancialVouchers] = useState<FinancialVoucher[]>([]);
   const [organizerPayments, setOrganizerPayments] = useState<OrganizerPayment[]>([]);
   const [receipts, setReceipts] = useState<IntakeReceipt[]>([]);
@@ -535,6 +595,7 @@ export default function HomePage() {
   const [reportStackNo, setReportStackNo] = useState("");
   const [reportRegistrationCode, setReportRegistrationCode] = useState("");
   const [reportFarmerName, setReportFarmerName] = useState("");
+  const [reportOrganizerName, setReportOrganizerName] = useState("");
   const [reportVillage, setReportVillage] = useState("");
   const [reportPaymentStatus, setReportPaymentStatus] = useState("");
   const [reportMode, setReportMode] = useState<ReportMode>("ALL");
@@ -589,6 +650,8 @@ export default function HomePage() {
   const [organizerPaymentTransactionNo, setOrganizerPaymentTransactionNo] = useState("");
   const [organizerPaymentRemarks, setOrganizerPaymentRemarks] = useState("");
   const [editingOrganizerPaymentId, setEditingOrganizerPaymentId] = useState("");
+  const [dashboardQuestion, setDashboardQuestion] = useState("");
+  const [dashboardAssistantResult, setDashboardAssistantResult] = useState<DashboardAssistantResult | null>(null);
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [isAddingVoucherPayment, setIsAddingVoucherPayment] = useState(false);
   const [dashboardExpandedSections, setDashboardExpandedSections] = useState<
@@ -597,6 +660,7 @@ export default function HomePage() {
     districts: false,
     godowns: false,
     organizers: false,
+    organizerPerformance: false,
     organizerNoIntake: false,
     pendingRegistrations: false,
     stackHotspots: false,
@@ -626,6 +690,15 @@ export default function HomePage() {
   const [selectedDiscrepancyId, setSelectedDiscrepancyId] = useState("");
   const [shiftTargetGodownId, setShiftTargetGodownId] = useState(defaultGodowns[0].id);
   const [shiftTargetStackNo, setShiftTargetStackNo] = useState("");
+  const [accommodationTargetRegistrationId, setAccommodationTargetRegistrationId] = useState("");
+  const [accommodationQtyQtl, setAccommodationQtyQtl] = useState("");
+  const [accommodationBags, setAccommodationBags] = useState("");
+  const [accommodationDate, setAccommodationDate] = useState(new Date().toISOString().slice(0, 10));
+  const [accommodationRemarks, setAccommodationRemarks] = useState("");
+  const [editingAccommodationId, setEditingAccommodationId] = useState("");
+  const [discrepancyWorkflowMode, setDiscrepancyWorkflowMode] = useState<"accommodation" | "shift">(
+    "accommodation"
+  );
   const [shiftQtyQtl, setShiftQtyQtl] = useState("");
   const [shiftBags, setShiftBags] = useState("");
   const [shiftDate, setShiftDate] = useState(new Date().toISOString().slice(0, 10));
@@ -670,6 +743,7 @@ export default function HomePage() {
     setLots(data.lots ?? []);
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setStackAccommodations(data.stackAccommodations ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
     setOrganizerPayments(data.organizerPayments ?? []);
     setReceipts(data.receipts ?? []);
@@ -762,6 +836,7 @@ export default function HomePage() {
     setLots([]);
     setDiscrepancies([]);
     setDiscrepancyShifts([]);
+    setStackAccommodations([]);
     setFinancialVouchers([]);
     setOrganizerPayments([]);
     setReceipts([]);
@@ -1000,6 +1075,7 @@ export default function HomePage() {
   );
   const todayReceiptNet = todayReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
   const isPaymentRegisterReport = reportType === "CUSTOM_DATE_PAYMENT_REGISTER";
+  const isOrganizerFarmerPaymentReport = reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER";
   const paymentRegisterDistrictOptions = Array.from(
     new Set(financialVouchers.map((item) => item.district?.trim()).filter(Boolean))
   ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
@@ -1145,6 +1221,74 @@ export default function HomePage() {
   const organizerNoIntakePendingQty = roundQtl(
     organizerNoIntakeRows.reduce((sum, row) => sum + row.zeroIntakePendingQty, 0)
   );
+  const organizerPerformanceRows: OrganizerPerformanceRow[] = Array.from(
+    registrations
+      .reduce((map, registration) => {
+        const organizerId = String(registration.organizerId ?? "").trim() || "direct-farmer";
+        const organizerName = String(registration.organizerName ?? "").trim() || "Direct Farmer";
+        const organizerRecord = organizerById.get(organizerId);
+        const current = map.get(organizerId) ?? {
+          organizerId,
+          organizerName: organizerRecord?.name || organizerName,
+          district: organizerRecord?.district || registration.district || "-",
+          farmerCount: 0,
+          expectedYieldQtl: 0,
+          depositedQtl: 0
+        };
+        current.farmerCount += 1;
+        current.expectedYieldQtl += Number(registration.expectedYieldQtl ?? 0);
+        current.depositedQtl += Number(registration.totalReceivedQtl ?? 0);
+        if (!current.district || current.district === "-") {
+          current.district = organizerRecord?.district || registration.district || "-";
+        }
+        map.set(organizerId, current);
+        return map;
+      }, new Map<string, { organizerId: string; organizerName: string; district: string; farmerCount: number; expectedYieldQtl: number; depositedQtl: number }>())
+      .values()
+  )
+    .map((row) => {
+      const expectedYieldQtl = roundQtl(row.expectedYieldQtl);
+      const depositedQtl = roundQtl(row.depositedQtl);
+      const pendingQtl = roundQtl(Math.max(expectedYieldQtl - depositedQtl, 0));
+      return {
+        organizerId: row.organizerId,
+        organizerName: row.organizerName,
+        district: row.district,
+        farmerCount: row.farmerCount,
+        expectedYieldQtl,
+        depositedQtl,
+        pendingQtl,
+        coveragePct: expectedYieldQtl > 0 ? roundQtl((depositedQtl / expectedYieldQtl) * 100) : 0
+      };
+    })
+    .sort((left, right) => {
+      if (right.depositedQtl !== left.depositedQtl) {
+        return right.depositedQtl - left.depositedQtl;
+      }
+      return left.organizerName.localeCompare(right.organizerName, "en", { sensitivity: "base" });
+    });
+  const visibleOrganizerPerformanceRows = dashboardExpandedSections.organizerPerformance
+    ? organizerPerformanceRows
+    : organizerPerformanceRows.slice(0, 5);
+  const organizerExpectedYieldTotal = roundQtl(
+    organizerPerformanceRows.reduce((sum, row) => sum + row.expectedYieldQtl, 0)
+  );
+  const organizerDepositedTotal = roundQtl(
+    organizerPerformanceRows.reduce((sum, row) => sum + row.depositedQtl, 0)
+  );
+  const organizerPendingYieldTotal = roundQtl(
+    organizerPerformanceRows.reduce((sum, row) => sum + row.pendingQtl, 0)
+  );
+  const organizerReportOptions = Array.from(
+    new Set(
+      financialVouchers
+        .filter((voucher) => !reportDistrict || voucher.district === reportDistrict)
+        .map((voucher) => {
+          const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+          return registration?.organizerName?.trim() || "Direct Farmer";
+        })
+    )
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
   const organizerAssignmentRegistration =
     registrations.find((item) => item.id === organizerAssignmentRegistrationId) ?? null;
   const organizerLedgerSummary =
@@ -1225,6 +1369,247 @@ export default function HomePage() {
   );
   const selectedDiscrepancy =
     discrepancies.find((item) => item.id === selectedDiscrepancyId) ?? openDiscrepancies[0] ?? null;
+  const selectedDiscrepancyAccommodations = selectedDiscrepancy
+    ? stackAccommodations
+        .filter((item) => item.discrepancyId === selectedDiscrepancy.id)
+        .slice()
+        .sort((left, right) =>
+          `${left.adjustmentDate}-${left.createdAt}`.localeCompare(`${right.adjustmentDate}-${right.createdAt}`)
+        )
+    : [];
+  const allStackAccommodationRows = stackAccommodations
+    .slice()
+    .sort((left, right) =>
+      `${right.adjustmentDate}-${right.createdAt}`.localeCompare(`${left.adjustmentDate}-${left.createdAt}`)
+    );
+  const selectedStackAccommodationRows = selectedDiscrepancy
+    ? allStackAccommodationRows
+        .filter(
+          (item) =>
+            item.godownId === selectedDiscrepancy.godownId &&
+            String(item.stackNo ?? "").trim() === String(selectedDiscrepancy.stackNo ?? "").trim()
+        )
+        .slice()
+        .sort((left, right) =>
+          `${left.adjustmentDate}-${left.createdAt}`.localeCompare(`${right.adjustmentDate}-${right.createdAt}`)
+        )
+    : [];
+  const adjustedStackCardPreview = selectedDiscrepancy
+    ? (() => {
+        const originalRows = Array.from(
+          receipts.reduce(
+            (map, receipt) => {
+              const sameStackLines = receipt.lines.filter(
+                (line) =>
+                  line.godownId === selectedDiscrepancy.godownId &&
+                  String(line.stackNo ?? "").trim() === String(selectedDiscrepancy.stackNo ?? "").trim()
+              );
+              if (!sameStackLines.length) {
+                return map;
+              }
+              const registration = registrations.find((item) => item.id === receipt.cropRegistrationId);
+              const regCode = receipt.cropRegistrationCode;
+              const current = map.get(regCode) ?? {
+                regCode,
+                farmerName: receipt.farmerName,
+                village: registration?.village || "-",
+                district: registration?.district || "-",
+                qtyQtl: 0,
+                bags: 0
+              };
+              current.qtyQtl = roundQtl(
+                current.qtyQtl +
+                  sameStackLines.reduce((sum, line) => sum + Number(line.netWeightQtl ?? line.qtyQtl ?? 0), 0)
+              );
+              current.bags += sameStackLines.reduce((sum, line) => sum + Number(line.noOfBags ?? 0), 0);
+              map.set(regCode, current);
+              return map;
+            },
+            new Map<
+              string,
+              {
+                regCode: string;
+                farmerName: string;
+                village: string;
+                district: string;
+                qtyQtl: number;
+                bags: number;
+              }
+            >()
+          ).values()
+        ).sort((left, right) => left.regCode.localeCompare(right.regCode, "en", { numeric: true }));
+
+        const adjustedRows = originalRows.map((row) => {
+          const adjustedInRows = selectedStackAccommodationRows.filter(
+            (item) => item.targetRegistrationCode === row.regCode
+          );
+          const adjustedOutRows = selectedStackAccommodationRows.filter(
+            (item) => item.sourceRegistrationCode === row.regCode
+          );
+          const adjustedInQtyQtl = roundQtl(
+            adjustedInRows.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+          );
+          const adjustedOutQtyQtl = roundQtl(
+            adjustedOutRows.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+          );
+          const adjustedInBags = adjustedInRows.reduce((sum, item) => sum + Number(item.adjustedBags ?? 0), 0);
+          const adjustedOutBags = adjustedOutRows.reduce((sum, item) => sum + Number(item.adjustedBags ?? 0), 0);
+          return {
+            regCode: row.regCode,
+            farmerName: row.farmerName,
+            village: row.village,
+            district: row.district,
+            originalQtyQtl: roundQtl(row.qtyQtl),
+            adjustedInQtyQtl,
+            adjustedOutQtyQtl,
+            finalQtyQtl: roundQtl(row.qtyQtl + adjustedInQtyQtl - adjustedOutQtyQtl),
+            originalBags: row.bags,
+            adjustedInBags,
+            adjustedOutBags,
+            finalBags: row.bags + adjustedInBags - adjustedOutBags,
+            changed:
+              adjustedInQtyQtl > 0 ||
+              adjustedOutQtyQtl > 0 ||
+              adjustedInBags > 0 ||
+              adjustedOutBags > 0
+          };
+        });
+
+        return {
+          title: "Adjusted Stack Card Preview",
+          godownName: selectedDiscrepancy.godownName,
+          stackNo: selectedDiscrepancy.stackNo,
+          generatedAt: new Date().toISOString(),
+          fileName: `adjusted-stack-card-${selectedDiscrepancy.godownName
+            .replace(/[^a-z0-9]+/gi, "-")
+            .replace(/^-+|-+$/g, "")
+            .toLowerCase()}-${String(selectedDiscrepancy.stackNo)
+            .replace(/[^a-z0-9]+/gi, "-")
+            .replace(/^-+|-+$/g, "")
+            .toLowerCase()}.xlsx`,
+          totalAccommodatedQtyQtl: roundQtl(
+            selectedStackAccommodationRows.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+          ),
+          totalAccommodatedBags: selectedStackAccommodationRows.reduce(
+            (sum, item) => sum + Number(item.adjustedBags ?? 0),
+            0
+          ),
+          changedFarmerCount: adjustedRows.filter((row) => row.changed).length,
+          originalRows,
+          adjustedRows
+        } satisfies AdjustedStackCardPreview;
+      })()
+    : null;
+  const selectedDiscrepancyMappedQty = roundQtl(
+    selectedDiscrepancyAccommodations.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+  );
+  const selectedDiscrepancyMappedBags = selectedDiscrepancyAccommodations.reduce(
+    (sum, item) => sum + Number(item.adjustedBags ?? 0),
+    0
+  );
+  const selectedDiscrepancyRemainingForAccommodation = selectedDiscrepancy
+    ? roundQtl(Math.max(Number(selectedDiscrepancy.excessQtyQtl ?? 0) - selectedDiscrepancyMappedQty, 0))
+    : 0;
+  const selectedDiscrepancyRemainingBagsForAccommodation = selectedDiscrepancy
+    ? Math.max(Number(selectedDiscrepancy.estimatedExcessBags ?? 0) - selectedDiscrepancyMappedBags, 0)
+    : 0;
+  const pendingAccommodationRows = discrepancies
+    .map((item) => {
+      const mappedQtyQtl = roundQtl(
+        stackAccommodations
+          .filter((entry) => entry.discrepancyId === item.id)
+          .reduce((sum, entry) => sum + Number(entry.adjustedQtyQtl ?? 0), 0)
+      );
+      const mappedBags = stackAccommodations
+        .filter((entry) => entry.discrepancyId === item.id)
+        .reduce((sum, entry) => sum + Number(entry.adjustedBags ?? 0), 0);
+      const remainingQtyQtl = roundQtl(Math.max(Number(item.excessQtyQtl ?? 0) - mappedQtyQtl, 0));
+      const remainingBags = Math.max(Number(item.estimatedExcessBags ?? 0) - mappedBags, 0);
+      return {
+        discrepancy: item,
+        mappedQtyQtl,
+        mappedBags,
+        remainingQtyQtl,
+        remainingBags
+      };
+    })
+    .filter((item) => item.discrepancy.status !== "RESOLVED" && item.remainingQtyQtl > 0)
+    .sort((left, right) => {
+      if (right.remainingQtyQtl !== left.remainingQtyQtl) {
+        return right.remainingQtyQtl - left.remainingQtyQtl;
+      }
+      return left.discrepancy.receiptDate.localeCompare(right.discrepancy.receiptDate);
+    });
+  const eligibleAccommodationTargets = selectedDiscrepancy
+    ? Array.from(
+        receipts.reduce(
+          (map, receipt) => {
+            if (receipt.cropRegistrationId === selectedDiscrepancy.cropRegistrationId) {
+              return map;
+            }
+            const sameStackLines = receipt.lines.filter(
+              (line) =>
+                line.godownId === selectedDiscrepancy.godownId &&
+                String(line.stackNo ?? "").trim() === String(selectedDiscrepancy.stackNo ?? "").trim()
+            );
+            if (!sameStackLines.length) {
+              return map;
+            }
+            const registration = registrations.find((item) => item.id === receipt.cropRegistrationId);
+            if (!registration) {
+              return map;
+            }
+            const current = map.get(registration.id) ?? {
+              registration,
+              stackQtyQtl: 0,
+              stackBags: 0
+            };
+            current.stackQtyQtl += sameStackLines.reduce((sum, line) => sum + Number(line.netWeightQtl ?? 0), 0);
+            current.stackBags += sameStackLines.reduce((sum, line) => sum + Number(line.noOfBags ?? 0), 0);
+            map.set(registration.id, current);
+            return map;
+          },
+          new Map<
+            string,
+            {
+              registration: RegistrationRecord;
+              stackQtyQtl: number;
+              stackBags: number;
+            }
+          >()
+        ).values()
+      ).sort((left, right) => right.registration.balanceQtl - left.registration.balanceQtl)
+    : [];
+  useEffect(() => {
+    if (!selectedDiscrepancy) {
+      setAccommodationTargetRegistrationId("");
+      setAccommodationQtyQtl("");
+      setAccommodationBags("");
+      setAccommodationRemarks("");
+      setEditingAccommodationId("");
+      setDiscrepancyWorkflowMode("accommodation");
+      return;
+    }
+    setAccommodationTargetRegistrationId((current) =>
+      current && eligibleAccommodationTargets.some((item) => item.registration.id === current)
+        ? current
+        : eligibleAccommodationTargets[0]?.registration.id ?? ""
+    );
+    setAccommodationQtyQtl((current) =>
+      current && Number(current) > 0 ? current : String(selectedDiscrepancyRemainingForAccommodation || "")
+    );
+    setAccommodationBags((current) =>
+      current && Number(current) >= 0 ? current : String(selectedDiscrepancyRemainingBagsForAccommodation || 0)
+    );
+    setAccommodationDate(new Date().toISOString().slice(0, 10));
+    setAccommodationRemarks("");
+    setEditingAccommodationId("");
+  }, [
+    selectedDiscrepancy?.id,
+    eligibleAccommodationTargets,
+    selectedDiscrepancyRemainingForAccommodation,
+    selectedDiscrepancyRemainingBagsForAccommodation
+  ]);
   const depositViewRegistration =
     registrations.find((item) => item.id === depositViewRegistrationId) ?? null;
   const registrationReceipts = depositViewRegistration
@@ -1572,6 +1957,539 @@ export default function HomePage() {
     `${dashboardMetrics.discrepancyCount} open discrepancies`
   ].join(" | ");
 
+  const dashboardAssistantSuggestions = [
+    "Which organizer farmers have not started intake?",
+    "Show organizer-wise pending commission balance",
+    "Show pending registrations for intake",
+    "Which vouchers are still draft or unpaid?",
+    "Show open discrepancy stacks",
+    "Show district-wise intake performance"
+  ];
+
+  function normalizeDashboardQuestion(value: string) {
+    return value.trim().toLowerCase();
+  }
+
+  function findQuestionMatch(question: string, values: string[]) {
+    const normalizedValues = values
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .sort((left, right) => String(right).length - String(left).length);
+    return normalizedValues.find((value) => question.includes(String(value).toLowerCase())) ?? "";
+  }
+
+  function runDashboardAssistant(questionOverride?: string) {
+    const rawQuestion = questionOverride ?? dashboardQuestion;
+    const normalizedQuestion = normalizeDashboardQuestion(rawQuestion);
+
+    if (!normalizedQuestion) {
+      setDashboardAssistantResult({
+        title: "Ask Your System",
+        summary:
+          "Type a question about organizers, pending intake, vouchers, discrepancies, or districts to get a live dashboard answer.",
+        columns: ["Suggested Questions"],
+        rows: dashboardAssistantSuggestions.map((item) => ({ "Suggested Questions": item }))
+      });
+      return;
+    }
+
+    const asksOrganizer = normalizedQuestion.includes("organizer") || normalizedQuestion.includes("organiser");
+    const asksNoIntake =
+      normalizedQuestion.includes("no intake") ||
+      normalizedQuestion.includes("not yet intake") ||
+      normalizedQuestion.includes("zero intake") ||
+      normalizedQuestion.includes("not started intake");
+    const asksPending =
+      normalizedQuestion.includes("pending") ||
+      normalizedQuestion.includes("balance") ||
+      normalizedQuestion.includes("outstanding") ||
+      normalizedQuestion.includes("unpaid");
+    const asksVoucher =
+      normalizedQuestion.includes("voucher") ||
+      normalizedQuestion.includes("payment") ||
+      normalizedQuestion.includes("paid") ||
+      normalizedQuestion.includes("draft");
+    const asksDiscrepancy =
+      normalizedQuestion.includes("discrepancy") ||
+      normalizedQuestion.includes("stack") ||
+      normalizedQuestion.includes("hotspot");
+    const asksDistrict =
+      normalizedQuestion.includes("district") ||
+      normalizedQuestion.includes("performance") ||
+      normalizedQuestion.includes("coverage");
+    const asksRegistration =
+      normalizedQuestion.includes("registration") ||
+      normalizedQuestion.includes("farmer") ||
+      normalizedQuestion.includes("intake");
+    const asksDirectFarmer =
+      normalizedQuestion.includes("direct farmer") || normalizedQuestion.includes("direct farmers");
+    const asksTop =
+      normalizedQuestion.includes("top") ||
+      normalizedQuestion.includes("highest") ||
+      normalizedQuestion.includes("maximum") ||
+      normalizedQuestion.includes("most");
+    const asksSummary =
+      normalizedQuestion.includes("summary") ||
+      normalizedQuestion.includes("total") ||
+      normalizedQuestion.includes("how much");
+    const matchedDistrict = findQuestionMatch(
+      normalizedQuestion,
+      districtDashboardRows.map((item) => item.district)
+    );
+    const matchedOrganizer = findQuestionMatch(
+      normalizedQuestion,
+      organizers.map((item) => item.name).concat(["direct farmer"])
+    );
+    const matchedVillage = findQuestionMatch(
+      normalizedQuestion,
+      registrations.map((item) => item.village).filter(Boolean)
+    );
+    const matchedFarmer = findQuestionMatch(
+      normalizedQuestion,
+      registrations.map((item) => item.farmerName)
+    );
+    const matchedStatus = ["draft", "paid", "overpaid", "unpaid", "pending"].find((item) =>
+      normalizedQuestion.includes(item)
+    );
+    const asksSeedDeductionNotMade =
+      normalizedQuestion.includes("seed deduction is not made") ||
+      normalizedQuestion.includes("seed deduction not made") ||
+      normalizedQuestion.includes("deduction is not made") ||
+      normalizedQuestion.includes("deduction not made") ||
+      normalizedQuestion.includes("deduction is not done") ||
+      normalizedQuestion.includes("deduction not done") ||
+      normalizedQuestion.includes("without deduction") ||
+      normalizedQuestion.includes("no deduction");
+    const asksUniqueFarmerList =
+      normalizedQuestion.includes("unique farmer") ||
+      normalizedQuestion.includes("unique farmer name") ||
+      normalizedQuestion.includes("unique farmers");
+    const asksSortByOrganizer =
+      normalizedQuestion.includes("sort by organiser") ||
+      normalizedQuestion.includes("sort by organizer") ||
+      normalizedQuestion.includes("organizer wise") ||
+      normalizedQuestion.includes("organiser wise");
+    const questionFilters: string[] = [];
+    if (matchedDistrict) {
+      questionFilters.push(`District: ${matchedDistrict}`);
+    }
+    if (matchedOrganizer) {
+      questionFilters.push(`Organizer: ${matchedOrganizer}`);
+    }
+    if (matchedVillage) {
+      questionFilters.push(`Village: ${matchedVillage}`);
+    }
+    if (matchedFarmer) {
+      questionFilters.push(`Farmer: ${matchedFarmer}`);
+    }
+    if (matchedStatus) {
+      questionFilters.push(`Status: ${matchedStatus.toUpperCase()}`);
+    }
+    const filterSuffix = questionFilters.length ? ` Filtered by ${questionFilters.join(" | ")}.` : "";
+
+    const matchesOrganizerFilter = (organizerName: string) =>
+      !matchedOrganizer ||
+      organizerName.toLowerCase() === matchedOrganizer ||
+      (matchedOrganizer === "direct farmer" && organizerName.toLowerCase() === "direct farmer");
+    const matchesDistrictFilter = (district: string) =>
+      !matchedDistrict || String(district || "").toLowerCase() === matchedDistrict;
+    const matchesVillageFilter = (village: string) =>
+      !matchedVillage || String(village || "").toLowerCase() === matchedVillage;
+    const matchesFarmerFilter = (farmerName: string) =>
+      !matchedFarmer || String(farmerName || "").toLowerCase() === matchedFarmer;
+
+    if (asksOrganizer && asksNoIntake) {
+      const filteredRows = organizerNoIntakeRows.filter(
+        (row) =>
+          matchesOrganizerFilter(row.organizer.name) &&
+          matchesDistrictFilter(row.organizer.district) &&
+          (!matchedFarmer ||
+            row.zeroIntakeRegistrations.some((registration) => matchesFarmerFilter(registration.farmerName))) &&
+          (!matchedVillage ||
+            row.zeroIntakeRegistrations.some((registration) => matchesVillageFilter(registration.village)))
+      );
+      const resultRows = asksTop ? filteredRows.slice(0, 1) : filteredRows;
+      setDashboardAssistantResult({
+        title: "Organizer Farmers Not Yet Intake",
+        summary: `${resultRows.reduce(
+          (sum, row) => sum + row.zeroIntakeFarmerCount,
+          0
+        )} organizer-linked farmer(s) still have zero intake against ${formatNumber(
+          resultRows.reduce((sum, row) => sum + row.zeroIntakePendingQty, 0)
+        )} QTL pending quantity.${filterSuffix}`,
+        columns: ["Organizer", "District", "No-Intake Farmers", "Pending Qty", "Farmer Preview"],
+        rows: resultRows.map((row) => ({
+          Organizer: row.organizer.name,
+          District: row.organizer.district || "-",
+          "No-Intake Farmers": row.zeroIntakeFarmerCount,
+          "Pending Qty": `${formatNumber(row.zeroIntakePendingQty)} QTL`,
+          "Farmer Preview": row.farmerPreview || "-"
+        }))
+      });
+      return;
+    }
+
+    if (asksOrganizer && (asksPending || normalizedQuestion.includes("commission"))) {
+      const filteredRows = organizerDashboardRows.filter(
+        (row) =>
+          matchesOrganizerFilter(row.organizer.name) &&
+          matchesDistrictFilter(row.organizer.district) &&
+          (!matchedFarmer ||
+            row.linkedRegistrations.some((registration) => matchesFarmerFilter(registration.farmerName))) &&
+          (!matchedVillage ||
+            row.linkedRegistrations.some((registration) => matchesVillageFilter(registration.village)))
+      );
+      const resultRows = asksTop ? filteredRows.slice(0, 1) : filteredRows;
+      setDashboardAssistantResult({
+        title: "Organizer Commission Pending Balance",
+        summary: `${resultRows.filter((row) => row.balanceAmount > 0).length} organizer(s) still have ${formatNumber(
+          resultRows.reduce((sum, row) => sum + row.balanceAmount, 0)
+        )} INR pending after ${formatNumber(
+          resultRows.reduce((sum, row) => sum + row.deductionAmount, 0)
+        )} INR deduction.${filterSuffix}`,
+        columns: [
+          "Organizer",
+          "District",
+          "Farmers",
+          "Gross Commission",
+          "Deduction",
+          "Net Payable",
+          "Paid",
+          "Balance"
+        ],
+        rows: resultRows.map((row) => ({
+          Organizer: row.organizer.name,
+          District: row.organizer.district || "-",
+          Farmers: row.farmerCount,
+          "Gross Commission": formatNumber(row.grossCommissionAmount),
+          Deduction: formatNumber(row.deductionAmount),
+          "Net Payable": formatNumber(row.netPayableAmount),
+          Paid: formatNumber(row.paidAmount),
+          Balance: formatNumber(row.balanceAmount)
+        }))
+      });
+      return;
+    }
+
+    if (asksDirectFarmer && asksVoucher) {
+      const directFarmerRows = financialVouchers
+        .filter((voucher) => {
+          const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+          return (
+            !registration?.organizerId &&
+            matchesDistrictFilter(voucher.district) &&
+            matchesVillageFilter(voucher.village) &&
+            matchesFarmerFilter(voucher.farmerName)
+          );
+        })
+        .sort((left, right) =>
+          `${left.voucherDate}-${left.voucherNo}`.localeCompare(`${right.voucherDate}-${right.voucherNo}`)
+        );
+      const resultRows = asksTop
+        ? directFarmerRows
+            .slice()
+            .sort((left, right) => Number(right.balanceAmount ?? 0) - Number(left.balanceAmount ?? 0))
+            .slice(0, 1)
+        : directFarmerRows;
+      setDashboardAssistantResult({
+        title: "Direct Farmer Payment Position",
+        summary: `${resultRows.length} voucher(s) belong to farmers without organizer linkage.${filterSuffix}`,
+        columns: ["Date", "Voucher No.", "Farmer", "District", "Final Payable", "Paid", "Balance", "Status"],
+        rows: resultRows.map((row) => ({
+          Date: row.voucherDate,
+          "Voucher No.": row.voucherNo,
+          Farmer: row.farmerName,
+          District: row.district || "-",
+          "Final Payable": formatNumber(row.finalPayableAmount),
+          Paid: formatNumber(row.totalPaidAmount),
+          Balance: formatNumber(row.balanceAmount),
+          Status: row.status
+        }))
+      });
+      return;
+    }
+
+    if (asksSeedDeductionNotMade) {
+      const deductionRows = financialVouchers
+        .filter((voucher) => {
+          const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+          const organizerName = registration?.organizerId
+            ? organizers.find((item) => item.id === registration.organizerId)?.name || "Direct Farmer"
+            : "Direct Farmer";
+          return (
+            Number(voucher.deductionAmount ?? 0) <= 0 &&
+            matchesDistrictFilter(voucher.district) &&
+            matchesVillageFilter(voucher.village) &&
+            matchesFarmerFilter(voucher.farmerName) &&
+            matchesOrganizerFilter(organizerName)
+          );
+        })
+        .map((voucher) => {
+          const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+          const organizerName = registration?.organizerId
+            ? organizers.find((item) => item.id === registration.organizerId)?.name || "Direct Farmer"
+            : "Direct Farmer";
+          return {
+            organizerName,
+            voucher
+          };
+        });
+
+      const uniqueRows = asksUniqueFarmerList
+        ? Array.from(
+            deductionRows.reduce(
+              (map, row) => {
+                const key = row.voucher.cropRegistrationId || row.voucher.cropRegistrationCode;
+                if (!map.has(key)) {
+                  map.set(key, row);
+                }
+                return map;
+              },
+              new Map<
+                string,
+                {
+                  organizerName: string;
+                  voucher: FinancialVoucher;
+                }
+              >()
+            ).values()
+          )
+        : deductionRows;
+
+      const sortedRows = uniqueRows.slice().sort((left, right) => {
+        if (asksSortByOrganizer || asksOrganizer) {
+          const organizerCompare = left.organizerName.localeCompare(right.organizerName, "en", {
+            sensitivity: "base"
+          });
+          if (organizerCompare !== 0) {
+            return organizerCompare;
+          }
+        }
+        return left.voucher.farmerName.localeCompare(right.voucher.farmerName, "en", {
+          sensitivity: "base"
+        });
+      });
+
+      setDashboardAssistantResult({
+        title: "Farmers With Seed Deduction Not Made",
+        summary: `${sortedRows.length} farmer voucher row(s) match the condition that seed deduction amount is zero.${filterSuffix}`,
+        columns: [
+          "Organizer",
+          "Farmer",
+          "Reg. Code",
+          "Village",
+          "District",
+          "Voucher No.",
+          "Final Payable",
+          "Deduction Amount",
+          "Status"
+        ],
+        rows: sortedRows.map((row) => ({
+          Organizer: row.organizerName,
+          Farmer: row.voucher.farmerName,
+          "Reg. Code": row.voucher.cropRegistrationCode,
+          Village: row.voucher.village || "-",
+          District: row.voucher.district || "-",
+          "Voucher No.": row.voucher.voucherNo,
+          "Final Payable": formatNumber(row.voucher.finalPayableAmount),
+          "Deduction Amount": formatNumber(row.voucher.deductionAmount),
+          Status: row.voucher.status
+        }))
+      });
+      return;
+    }
+
+    if (asksVoucher && normalizedQuestion.includes("overpaid")) {
+      const overpaidRows = financialVouchers
+        .filter(
+          (row) =>
+            Number(row.balanceAmount ?? 0) < 0 &&
+            matchesDistrictFilter(row.district) &&
+            matchesVillageFilter(row.village) &&
+            matchesFarmerFilter(row.farmerName) &&
+            (!matchedOrganizer ||
+              (registrations.find((item) => item.id === row.cropRegistrationId)?.organizerId
+                ? organizers
+                    .find(
+                      (organizer) =>
+                        organizer.id ===
+                        registrations.find((item) => item.id === row.cropRegistrationId)?.organizerId
+                    )
+                    ?.name.toLowerCase() === matchedOrganizer
+                : matchedOrganizer === "direct farmer"))
+        )
+        .sort((left, right) => Number(left.balanceAmount ?? 0) - Number(right.balanceAmount ?? 0));
+      const resultRows = asksTop ? overpaidRows.slice(0, 1) : overpaidRows;
+      setDashboardAssistantResult({
+        title: "Overpaid Farmer Vouchers",
+        summary: `${resultRows.length} voucher(s) currently show negative balance, meaning overpayment has been recorded.${filterSuffix}`,
+        columns: ["Date", "Voucher No.", "Farmer", "District", "Final Payable", "Paid", "Balance", "Status"],
+        rows: resultRows.map((row) => ({
+          Date: row.voucherDate,
+          "Voucher No.": row.voucherNo,
+          Farmer: row.farmerName,
+          District: row.district || "-",
+          "Final Payable": formatNumber(row.finalPayableAmount),
+          Paid: formatNumber(row.totalPaidAmount),
+          Balance: formatNumber(row.balanceAmount),
+          Status: row.status
+        }))
+      });
+      return;
+    }
+
+    if (asksVoucher && (normalizedQuestion.includes("draft") || asksPending)) {
+      const voucherRows = financialVouchers
+        .filter((row) => {
+          const registration = registrations.find((item) => item.id === row.cropRegistrationId);
+          const organizerName = registration?.organizerId
+            ? organizers.find((item) => item.id === registration.organizerId)?.name || ""
+            : "Direct Farmer";
+          const statusMatches =
+            matchedStatus === "draft"
+              ? row.status === "DRAFT"
+              : matchedStatus === "paid"
+                ? row.status === "PAID"
+                : matchedStatus === "overpaid"
+                  ? Number(row.balanceAmount ?? 0) < 0
+                  : matchedStatus === "unpaid" || matchedStatus === "pending"
+                    ? Number(row.balanceAmount ?? 0) > 0
+                    : normalizedQuestion.includes("draft")
+                      ? row.status === "DRAFT"
+                      : Number(row.balanceAmount ?? 0) > 0;
+          return (
+            statusMatches &&
+            matchesDistrictFilter(row.district) &&
+            matchesVillageFilter(row.village) &&
+            matchesFarmerFilter(row.farmerName) &&
+            matchesOrganizerFilter(organizerName)
+          );
+        })
+        .slice()
+        .sort((left, right) => {
+          if (asksTop) {
+            return Number(right.balanceAmount ?? 0) - Number(left.balanceAmount ?? 0);
+          }
+          return `${left.voucherDate}-${left.voucherNo}`.localeCompare(`${right.voucherDate}-${right.voucherNo}`);
+        });
+      const resultRows = asksTop ? voucherRows.slice(0, 1) : voucherRows;
+      setDashboardAssistantResult({
+        title: normalizedQuestion.includes("draft") ? "Draft Vouchers" : "Pending Farmer Payment Vouchers",
+        summary: normalizedQuestion.includes("draft")
+          ? `${resultRows.length} voucher(s) are still in draft mode.${filterSuffix}`
+          : `${resultRows.length} voucher(s) are not fully settled and show pending farmer payment balance.${filterSuffix}`,
+        columns: ["Date", "Voucher No.", "Farmer", "District", "Final Payable", "Paid", "Balance", "Status"],
+        rows: resultRows.map((row) => ({
+          Date: row.voucherDate,
+          "Voucher No.": row.voucherNo,
+          Farmer: row.farmerName,
+          District: row.district || "-",
+          "Final Payable": formatNumber(row.finalPayableAmount),
+          Paid: formatNumber(row.totalPaidAmount),
+          Balance: formatNumber(row.balanceAmount),
+          Status: row.status
+        }))
+      });
+      return;
+    }
+
+    if (asksDiscrepancy) {
+      const discrepancyRows = openDiscrepancies
+        .filter((row) => {
+          const registration = registrations.find((item) => item.id === row.cropRegistrationId);
+          return (
+            matchesDistrictFilter(registration?.district || "") &&
+            matchesVillageFilter(registration?.village || "") &&
+            matchesFarmerFilter(row.farmerName)
+          );
+        })
+        .slice()
+        .sort((left, right) => Number(right.excessQtyQtl ?? 0) - Number(left.excessQtyQtl ?? 0));
+      const resultRows = asksTop ? discrepancyRows.slice(0, 1) : discrepancyRows;
+      setDashboardAssistantResult({
+        title: "Open Discrepancy Stack Position",
+        summary: `${resultRows.length} open discrepancy case(s) match this question across ${stackHotspotRows.length} hotspot group(s).${filterSuffix}`,
+        columns: ["Reg. Code", "Farmer", "Godown", "Stack", "Excess Bags", "Excess Qty", "Status"],
+        rows: resultRows.map((row) => ({
+            "Reg. Code": row.cropRegistrationCode,
+            Farmer: row.farmerName,
+            Godown: row.godownName,
+            Stack: row.stackNo,
+            "Excess Bags": row.estimatedExcessBags,
+            "Excess Qty": `${formatNumber(row.excessQtyQtl)} QTL`,
+            Status: row.status
+          }))
+      });
+      return;
+    }
+
+    if (asksDistrict) {
+      const districtRows = districtDashboardRows
+        .filter((row) => matchesDistrictFilter(row.district))
+        .slice()
+        .sort((left, right) => {
+          if (asksTop) {
+            return Number(right.receivedNet ?? 0) - Number(left.receivedNet ?? 0);
+          }
+          return Number(right.receivedNet ?? 0) - Number(left.receivedNet ?? 0);
+        });
+      const resultRows = asksTop ? districtRows.slice(0, 1) : districtRows;
+      setDashboardAssistantResult({
+        title: "District Intake Performance",
+        summary: `${resultRows.length} district row(s) match this question, sorted by received quantity.${filterSuffix}`,
+        columns: ["District", "Registrations", "Received", "Coverage", "Pending", "Discrepancies"],
+        rows: resultRows.map((row) => ({
+          District: row.district,
+          Registrations: row.registrations,
+          Received: `${formatNumber(row.receivedNet)} QTL`,
+          Coverage: `${formatNumber(row.coveragePct)}%`,
+          Pending: `${formatNumber(row.pending)} QTL`,
+          Discrepancies: row.discrepancyCases
+        }))
+      });
+      return;
+    }
+
+    if (asksRegistration || asksNoIntake) {
+      const registrationRows = pendingRegistrationRows
+        .filter((row) => {
+          const organizerName =
+            organizers.find((item) => item.id === row.organizerId)?.name || "Direct Farmer";
+          return (
+            matchesDistrictFilter(row.district) &&
+            matchesVillageFilter(row.village) &&
+            matchesFarmerFilter(row.farmerName) &&
+            matchesOrganizerFilter(organizerName)
+          );
+        })
+        .slice()
+        .sort((left, right) => Number(right.balanceQtl ?? 0) - Number(left.balanceQtl ?? 0));
+      const resultRows = asksTop ? registrationRows.slice(0, 1) : registrationRows;
+      setDashboardAssistantResult({
+        title: "Pending Farmer Intake",
+        summary: `${resultRows.length} registration(s) still have pending intake balance.${filterSuffix}`,
+        columns: ["Reg. Code", "Farmer", "District", "Received", "Pending", "Organizer"],
+        rows: resultRows.map((row) => ({
+          "Reg. Code": row.cropRegistrationCode,
+          Farmer: row.farmerName,
+          District: row.district || "-",
+          Received: `${formatNumber(row.totalReceivedQtl)} QTL`,
+          Pending: `${formatNumber(row.balanceQtl)} QTL`,
+          Organizer: organizers.find((item) => item.id === row.organizerId)?.name || "Direct Farmer"
+        }))
+      });
+      return;
+    }
+
+    setDashboardAssistantResult({
+      title: "Dashboard Command Answer",
+      summary:
+        "I could not match that question well enough yet. Try asking with names like district, organizer, village, farmer, or status such as draft, unpaid, paid, or overpaid.",
+      columns: ["Suggested Questions"],
+      rows: dashboardAssistantSuggestions.map((item) => ({ "Suggested Questions": item }))
+    });
+  }
+
   async function readWorkbook(file: File) {
     const data = await file.arrayBuffer();
     return XLSX.read(data, { type: "array" });
@@ -1609,17 +2527,7 @@ export default function HomePage() {
       throw new Error("Unable to import registrations into MongoDB.");
     }
 
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
+    const data = (await response.json()) as AppBootstrapPayload;
 
     setRegistrations(data.registrations ?? []);
     setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -1627,6 +2535,7 @@ export default function HomePage() {
     setLots(data.lots ?? []);
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setStackAccommodations(data.stackAccommodations ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
     setReceipts(data.receipts ?? []);
     setFeatures({
@@ -2113,16 +3022,7 @@ export default function HomePage() {
         }
 
         return response.json();
-      })) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-      };
+      })) as AppBootstrapPayload;
 
       setRegistrations(data.registrations ?? []);
       const nextGodowns = data.godowns?.length ? data.godowns : defaultGodowns;
@@ -2132,6 +3032,7 @@ export default function HomePage() {
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
         discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
@@ -2225,23 +3126,14 @@ export default function HomePage() {
         const errorBody = await response.json().catch(() => null);
         throw new Error(errorBody?.message || "Unable to delete receipt.");
       }
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-      };
+      const data = (await response.json()) as AppBootstrapPayload;
       setRegistrations(data.registrations ?? []);
       setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
       setStacks(data.stacks?.length ? data.stacks : defaultStacks);
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setFinancialVouchers(data.financialVouchers ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
@@ -2273,6 +3165,7 @@ export default function HomePage() {
       return;
     }
     setSelectedDiscrepancyId(discrepancy.id);
+    setDiscrepancyWorkflowMode("shift");
     setShiftTargetGodownId(godowns[0]?.id ?? "");
     setShiftTargetStackNo("");
     setShiftQtyQtl(String(discrepancy.excessQtyQtl));
@@ -2281,6 +3174,362 @@ export default function HomePage() {
     setShiftApprovedBy("");
     setShiftRemarks("");
     setToast(`Shift entry opened for ${discrepancy.discrepancyNo}.`);
+  }
+
+  function saveStackAccommodation() {
+    if (!requirePermission("canShift", "Your role cannot save stack accommodation.")) {
+      return;
+    }
+    if (!selectedDiscrepancy) {
+      notifyUser("Select a discrepancy first.");
+      return;
+    }
+
+    void (async () => {
+      const adjustedQty = Number(accommodationQtyQtl);
+      const adjustedBagCount = Number(accommodationBags || 0);
+
+      if (!accommodationTargetRegistrationId) {
+        throw new Error("Select target farmer in the same stack.");
+      }
+      if (!Number.isFinite(adjustedQty) || adjustedQty <= 0) {
+        throw new Error("Enter valid accommodation quantity.");
+      }
+      if (!Number.isFinite(adjustedBagCount) || adjustedBagCount < 0) {
+        throw new Error("Enter valid accommodation bags.");
+      }
+
+      const response = await fetchWithAuth(
+        editingAccommodationId
+          ? `${API_BASE}/api/seed/discrepancies/accommodations/${editingAccommodationId}`
+          : `${API_BASE}/api/seed/discrepancies/accommodations`,
+        {
+        method: editingAccommodationId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          discrepancyId: selectedDiscrepancy.id,
+          targetRegistrationId: accommodationTargetRegistrationId,
+          adjustedQtyQtl: adjustedQty,
+          adjustedBags: adjustedBagCount,
+          adjustmentDate: accommodationDate,
+          remarks: accommodationRemarks,
+          adminPassword: ""
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to save stack accommodation.");
+      }
+
+      const data = (await response.json()) as AppBootstrapPayload;
+
+      setRegistrations(data.registrations ?? []);
+      setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+      setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+      setLots(data.lots ?? []);
+      setDiscrepancies(data.discrepancies ?? []);
+      setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
+      setFinancialVouchers(data.financialVouchers ?? []);
+      setReceipts(data.receipts ?? []);
+      setFeatures({
+        discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+      });
+      setEditingAccommodationId("");
+      setAccommodationTargetRegistrationId("");
+      setAccommodationQtyQtl("");
+      setAccommodationBags("");
+      setAccommodationDate(new Date().toISOString().slice(0, 10));
+      setAccommodationRemarks("");
+      notifyUser(
+        editingAccommodationId
+          ? "Stack accommodation updated. This mapping only affects accommodation register view."
+          : "Stack accommodation saved. This mapping only affects accommodation register view."
+      );
+    })().catch((error) => {
+      notifyUser(error instanceof Error ? error.message : "Unable to save stack accommodation.");
+    });
+  }
+
+  function beginEditStackAccommodation(accommodation: StackAccommodation) {
+    setSelectedDiscrepancyId(accommodation.discrepancyId);
+    setDiscrepancyWorkflowMode("accommodation");
+    setEditingAccommodationId(accommodation.id);
+    setAccommodationTargetRegistrationId(accommodation.targetRegistrationId);
+    setAccommodationQtyQtl(String(accommodation.adjustedQtyQtl));
+    setAccommodationBags(String(accommodation.adjustedBags));
+    setAccommodationDate(accommodation.adjustmentDate);
+    setAccommodationRemarks(accommodation.remarks ?? "");
+    setToast(`Accommodation edit opened for ${accommodation.sourceRegistrationCode} -> ${accommodation.targetRegistrationCode}.`);
+  }
+
+  function deleteStackAccommodation(accommodation: StackAccommodation) {
+    if (!requirePermission("canShift", "Your role cannot delete stack accommodation.")) {
+      return;
+    }
+    if (
+      !confirmDestructiveAction({
+        itemLabel: `Accommodation: ${accommodation.sourceRegistrationCode} -> ${accommodation.targetRegistrationCode}`
+      })
+    ) {
+      return;
+    }
+
+    void (async () => {
+      const response = await fetchWithAuth(
+        `${API_BASE}/api/seed/discrepancies/accommodations/${accommodation.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ adminPassword: "" })
+        }
+      );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || "Unable to delete stack accommodation.");
+      }
+      const data = (await response.json()) as AppBootstrapPayload;
+      setRegistrations(data.registrations ?? []);
+      setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
+      setStacks(data.stacks?.length ? data.stacks : defaultStacks);
+      setLots(data.lots ?? []);
+      setDiscrepancies(data.discrepancies ?? []);
+      setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
+      setFinancialVouchers(data.financialVouchers ?? []);
+      setReceipts(data.receipts ?? []);
+      setFeatures({
+        discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
+      });
+      if (editingAccommodationId === accommodation.id) {
+        setEditingAccommodationId("");
+        setAccommodationTargetRegistrationId("");
+        setAccommodationQtyQtl("");
+        setAccommodationBags("");
+        setAccommodationDate(new Date().toISOString().slice(0, 10));
+        setAccommodationRemarks("");
+      }
+      notifyUser("Stack accommodation deleted.");
+    })().catch((error) => {
+      notifyUser(error instanceof Error ? error.message : "Unable to delete stack accommodation.");
+    });
+  }
+
+  function downloadAdjustedStackCardExcel() {
+    if (!adjustedStackCardPreview) {
+      notifyUser("Select a discrepancy with stack accommodation data first.");
+      return;
+    }
+
+    const originalTotalQty = roundQtl(
+      adjustedStackCardPreview.originalRows.reduce((sum, row) => sum + Number(row.qtyQtl ?? 0), 0)
+    );
+    const originalTotalBags = adjustedStackCardPreview.originalRows.reduce(
+      (sum, row) => sum + Number(row.bags ?? 0),
+      0
+    );
+    const finalTotalQty = roundQtl(
+      adjustedStackCardPreview.adjustedRows.reduce((sum, row) => sum + Number(row.finalQtyQtl ?? 0), 0)
+    );
+    const finalTotalBags = adjustedStackCardPreview.adjustedRows.reduce(
+      (sum, row) => sum + Number(row.finalBags ?? 0),
+      0
+    );
+
+    const rows: (string | number)[][] = [
+      ["KRISHIV AGRI GENETICS LLP"],
+      [adjustedStackCardPreview.title],
+      [],
+      ["Godown", adjustedStackCardPreview.godownName],
+      ["Stack No.", adjustedStackCardPreview.stackNo],
+      ["Generated On", new Date(adjustedStackCardPreview.generatedAt).toLocaleString("en-IN")],
+      ["Note", "For reference only. Does not alter main stock records."],
+      [],
+      ["Original Stack Farmer Rows"],
+      ["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags"],
+      ...adjustedStackCardPreview.originalRows.map((row, index) => [
+        index + 1,
+        row.regCode,
+        row.farmerName,
+        row.village,
+        row.qtyQtl,
+        row.bags
+      ]),
+      ["", "", "", "TOTAL", originalTotalQty, originalTotalBags],
+      [],
+      ["Final Adjusted Farmer-wise Stack Position"],
+      ["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags", "Mark"],
+      ...adjustedStackCardPreview.adjustedRows.map((row, index) => [
+        index + 1,
+        row.regCode,
+        row.farmerName,
+        row.village,
+        row.finalQtyQtl,
+        row.finalBags,
+        row.changed ? "*" : ""
+      ]),
+      ["", "", "", "TOTAL", finalTotalQty, finalTotalBags, ""],
+      [],
+      ["Change Summary"],
+      ["Changed Farmers", adjustedStackCardPreview.changedFarmerCount],
+      ["Accommodated Qty (QTL)", adjustedStackCardPreview.totalAccommodatedQtyQtl],
+      ["Accommodated Bags", adjustedStackCardPreview.totalAccommodatedBags],
+      [],
+      ["* Marked rows indicate farmers affected in accommodation."]
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Adjusted Stack Card");
+    XLSX.writeFile(workbook, adjustedStackCardPreview.fileName);
+    notifyUser("Adjusted stack card Excel downloaded.");
+  }
+
+  function downloadAdjustedStackCardPdf() {
+    if (!adjustedStackCardPreview) {
+      notifyUser("Select a discrepancy with stack accommodation data first.");
+      return;
+    }
+
+    const originalTotalQty = roundQtl(
+      adjustedStackCardPreview.originalRows.reduce((sum, row) => sum + Number(row.qtyQtl ?? 0), 0)
+    );
+    const originalTotalBags = adjustedStackCardPreview.originalRows.reduce(
+      (sum, row) => sum + Number(row.bags ?? 0),
+      0
+    );
+    const finalTotalQty = roundQtl(
+      adjustedStackCardPreview.adjustedRows.reduce((sum, row) => sum + Number(row.finalQtyQtl ?? 0), 0)
+    );
+    const finalTotalBags = adjustedStackCardPreview.adjustedRows.reduce(
+      (sum, row) => sum + Number(row.finalBags ?? 0),
+      0
+    );
+
+    const pdf = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    pdf.text("KRISHIV AGRI GENETICS LLP", 14, 14);
+    pdf.setFontSize(11);
+    pdf.text(adjustedStackCardPreview.title, 14, 20);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.5);
+    pdf.text(`Godown: ${adjustedStackCardPreview.godownName}`, 14, 26);
+    pdf.text(`Stack No.: ${adjustedStackCardPreview.stackNo}`, 95, 26);
+    pdf.text(
+      `Generated: ${new Date(adjustedStackCardPreview.generatedAt).toLocaleString("en-IN")}`,
+      170,
+      26,
+      { align: "right" }
+    );
+    pdf.text("For reference only. Does not alter main stock records.", 14, 31);
+
+    autoTable(pdf, {
+      startY: 35,
+      head: [["Original Stack Position", "", "", "", "", ""]],
+      body: [
+        ["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags"],
+        ...adjustedStackCardPreview.originalRows.map((row, index) => [
+          String(index + 1),
+          row.regCode,
+          row.farmerName,
+          row.village,
+          formatNumber(row.qtyQtl),
+          String(row.bags)
+        ]),
+        ["", "", "", "TOTAL", formatNumber(originalTotalQty), String(originalTotalBags)]
+      ],
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 7,
+        cellPadding: 1.5,
+        textColor: [47, 30, 18]
+      },
+      headStyles: {
+        fillColor: [127, 75, 38],
+        fontSize: 7.5,
+        halign: "left"
+      },
+      bodyStyles: {
+        valign: "middle"
+      },
+      margin: { left: 14, right: 14 }
+    });
+
+    const originalTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
+    autoTable(pdf, {
+      startY: (originalTable.lastAutoTable?.finalY ?? 35) + 5,
+      head: [["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags", "Mark"]],
+      body: [
+        ...adjustedStackCardPreview.adjustedRows.map((row, index) => [
+          String(index + 1),
+          row.regCode,
+          row.farmerName,
+          row.village,
+          formatNumber(row.finalQtyQtl),
+          String(row.finalBags),
+          row.changed ? "*" : ""
+        ]),
+        ["", "", "", "TOTAL", formatNumber(finalTotalQty), String(finalTotalBags), ""]
+      ],
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 6.5,
+        cellPadding: 1.3,
+        overflow: "linebreak",
+        textColor: [47, 30, 18]
+      },
+      headStyles: {
+        fillColor: [48, 86, 61],
+        fontSize: 7,
+        halign: "center"
+      },
+      bodyStyles: {
+        valign: "middle"
+      },
+      margin: { left: 14, right: 14, bottom: 10 }
+    });
+
+    const finalTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
+    autoTable(pdf, {
+      startY: (finalTable.lastAutoTable?.finalY ?? 35) + 5,
+      head: [["Change Summary", "Value"]],
+      body: [
+        ["Changed Farmers", String(adjustedStackCardPreview.changedFarmerCount)],
+        ["Accommodated Qty", `${formatNumber(adjustedStackCardPreview.totalAccommodatedQtyQtl)} QTL`],
+        ["Accommodated Bags", String(adjustedStackCardPreview.totalAccommodatedBags)],
+        ["Note", "* Marked rows indicate farmers affected in accommodation."]
+      ],
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 7,
+        cellPadding: 1.5,
+        textColor: [47, 30, 18]
+      },
+      headStyles: {
+        fillColor: [94, 63, 45],
+        fontSize: 7.2
+      },
+      margin: { left: 14, right: 120, bottom: 10 },
+      tableWidth: 75
+    });
+
+    pdf.save(adjustedStackCardPreview.fileName.replace(/\.xlsx$/i, ".pdf"));
+    notifyUser("Adjusted stack card PDF downloaded.");
   }
 
   function saveDiscrepancyShift() {
@@ -2331,17 +3580,7 @@ export default function HomePage() {
         throw new Error(errorBody?.message || "Unable to save discrepancy shift.");
       }
 
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-      };
+      const data = (await response.json()) as AppBootstrapPayload;
 
       setRegistrations(data.registrations ?? []);
       setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -2349,6 +3588,7 @@ export default function HomePage() {
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setFinancialVouchers(data.financialVouchers ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
@@ -2378,18 +3618,7 @@ export default function HomePage() {
         throw new Error("Unable to run discrepancy auto validation.");
       }
 
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-        validationSummary?: ValidationSummary;
-      };
+      const data = (await response.json()) as AppBootstrapPayload;
 
       setRegistrations(data.registrations ?? []);
       setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -2397,12 +3626,13 @@ export default function HomePage() {
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setFinancialVouchers(data.financialVouchers ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
         discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
       });
-      setValidationSummary(data.validationSummary ?? null);
+      setValidationSummary((data.validationSummary as ValidationSummary) ?? null);
       notifyUser("Discrepancy auto validation completed.");
     })().catch((error) => {
       notifyUser(error instanceof Error ? error.message : "Unable to run discrepancy validation.");
@@ -2421,18 +3651,7 @@ export default function HomePage() {
         throw new Error("Unable to run lot auto validation.");
       }
 
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-        validationSummary?: ValidationSummary;
-      };
+      const data = (await response.json()) as AppBootstrapPayload;
 
       setRegistrations(data.registrations ?? []);
       setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -2440,12 +3659,13 @@ export default function HomePage() {
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setFinancialVouchers(data.financialVouchers ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
         discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
       });
-      setValidationSummary(data.validationSummary ?? null);
+      setValidationSummary((data.validationSummary as ValidationSummary) ?? null);
       notifyUser("Lot auto validation completed.");
     })().catch((error) => {
       notifyUser(error instanceof Error ? error.message : "Unable to run lot validation.");
@@ -2464,18 +3684,7 @@ export default function HomePage() {
         throw new Error("Unable to reindex lot sequence.");
       }
 
-      const data = (await response.json()) as {
-        registrations: RegistrationRecord[];
-        godowns: Godown[];
-        stacks: Stack[];
-        lots: CertificationLot[];
-        discrepancies: IntakeDiscrepancy[];
-        discrepancyShifts: DiscrepancyShift[];
-        financialVouchers: FinancialVoucher[];
-        receipts: IntakeReceipt[];
-        features?: { discrepancyWorkflow?: boolean };
-        validationSummary?: ValidationSummary;
-      };
+      const data = (await response.json()) as AppBootstrapPayload;
 
       setRegistrations(data.registrations ?? []);
       setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -2483,12 +3692,13 @@ export default function HomePage() {
       setLots(data.lots ?? []);
       setDiscrepancies(data.discrepancies ?? []);
       setDiscrepancyShifts(data.discrepancyShifts ?? []);
+      setStackAccommodations(data.stackAccommodations ?? []);
       setFinancialVouchers(data.financialVouchers ?? []);
       setReceipts(data.receipts ?? []);
       setFeatures({
         discrepancyWorkflow: Boolean(data.features?.discrepancyWorkflow)
       });
-      setValidationSummary(data.validationSummary ?? null);
+      setValidationSummary((data.validationSummary as ValidationSummary) ?? null);
       notifyUser("Lot sequence reindexed successfully.");
     })().catch((error) => {
       notifyUser(error instanceof Error ? error.message : "Unable to reindex lot sequence.");
@@ -2634,6 +3844,114 @@ export default function HomePage() {
     };
   }
 
+  function buildOrganizerFarmerPaymentRegisterPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const organizerFilter = reportOrganizerName.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const rows = financialVouchers
+      .map((voucher) => {
+        const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+        const organizerName = registration?.organizerName?.trim() || "Direct Farmer";
+        return {
+          organizerName,
+          farmerName: voucher.farmerName,
+          regCode: voucher.cropRegistrationCode,
+          village: voucher.village || registration?.village || "-",
+          district: voucher.district || registration?.district || "-",
+          seasonLabel: `${voucher.season} ${voucher.year}`.trim(),
+          voucherDate: voucher.voucherDate,
+          netAmount: roundQtl(getVoucherFinalPayable(voucher)),
+          paidAmount: roundQtl(getVoucherTotalPaid(voucher)),
+          balanceAmount: roundQtl(getVoucherBalance(voucher)),
+          status: voucher.status || "DRAFT"
+        };
+      })
+      .filter((row) => !seasonLabel || row.seasonLabel.toLowerCase() === seasonLabel.toLowerCase())
+      .filter((row) => !fromDate || row.voucherDate >= fromDate)
+      .filter((row) => !toDate || row.voucherDate <= toDate)
+      .filter((row) => !districtFilter || row.district.toLowerCase() === districtFilter)
+      .filter((row) => !organizerFilter || row.organizerName.toLowerCase() === organizerFilter)
+      .sort((left, right) => {
+        const organizerCompare = left.organizerName.localeCompare(right.organizerName, "en", {
+          sensitivity: "base"
+        });
+        if (organizerCompare !== 0) {
+          return organizerCompare;
+        }
+        const farmerCompare = left.farmerName.localeCompare(right.farmerName, "en", {
+          sensitivity: "base"
+        });
+        if (farmerCompare !== 0) {
+          return farmerCompare;
+        }
+        return left.regCode.localeCompare(right.regCode, "en", {
+          sensitivity: "base",
+          numeric: true
+        });
+      });
+
+    const previewRows = rows.map((row, index) => ({
+      "S.No.": index + 1,
+      Organizer: row.organizerName,
+      "Farmer Name": row.farmerName,
+      "Reg. Code": row.regCode,
+      Village: row.village,
+      District: row.district,
+      "Net Amount": row.netAmount,
+      "Paid Amount": row.paidAmount,
+      Balance: row.balanceAmount,
+      Status: row.status
+    }));
+
+    const organizerSummary = Array.from(
+      rows.reduce((map, row) => {
+        const current = map.get(row.organizerName) ?? { count: 0, balance: 0 };
+        current.count += 1;
+        current.balance = roundQtl(current.balance + row.balanceAmount);
+        map.set(row.organizerName, current);
+        return map;
+      }, new Map<string, { count: number; balance: number }>())
+    )
+      .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+      .map(([organizerName, summary]) => `${organizerName}: ${summary.count} / ${formatNumber(summary.balance)}`)
+      .join(" | ") || "-";
+
+    return {
+      reportType: "ORGANIZER_FARMER_PAYMENT_REGISTER",
+      title: "Organizer Wise Farmer Payment Register",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "S.No.": 1,
+          Organizer: "",
+          "Farmer Name": "",
+          "Reg. Code": "",
+          Village: "",
+          District: "",
+          "Net Amount": 0,
+          "Paid Amount": 0,
+          Balance: 0,
+          Status: ""
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        "From Date": fromDate ? formatDateDisplay(fromDate) : "ALL",
+        "To Date": toDate ? formatDateDisplay(toDate) : "ALL",
+        Organizer: reportOrganizerName || "ALL",
+        "Total Farmers": previewRows.length,
+        "Total Net Amount": formatNumber(rows.reduce((sum, row) => sum + row.netAmount, 0)),
+        "Total Paid Amount": formatNumber(rows.reduce((sum, row) => sum + row.paidAmount, 0)),
+        "Total Balance": formatNumber(rows.reduce((sum, row) => sum + row.balanceAmount, 0)),
+        "Organizer Summary": organizerSummary
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `organizer-farmer-payment-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
   function buildLocalReportWorkbook(preview: ReportPreview) {
     const rows: (string | number)[][] = [];
     rows.push([preview.title]);
@@ -2716,6 +4034,9 @@ export default function HomePage() {
     if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER") {
       return buildCustomDatePaymentRegisterPreview();
     }
+    if (reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER") {
+      return buildOrganizerFarmerPaymentRegisterPreview();
+    }
 
     const response = await fetchWithAuth(`${API_BASE}/api/seed/reports/preview`, {
       method: "POST",
@@ -2744,8 +4065,12 @@ export default function HomePage() {
 
   function downloadReportWorkbook() {
     void (async () => {
-      if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER") {
-        const preview = reportPreview ?? buildCustomDatePaymentRegisterPreview();
+      if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER" || reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER") {
+        const preview =
+          reportPreview ??
+          (reportType === "CUSTOM_DATE_PAYMENT_REGISTER"
+            ? buildCustomDatePaymentRegisterPreview()
+            : buildOrganizerFarmerPaymentRegisterPreview());
         if (!reportPreview) {
           setReportPreview(preview);
         }
@@ -2872,6 +4197,7 @@ export default function HomePage() {
     setReportStackNo("");
     setReportRegistrationCode("");
     setReportFarmerName("");
+    setReportOrganizerName("");
     setReportVillage("");
     setReportPaymentStatus("");
     setReportMode("ALL");
@@ -3576,17 +4902,7 @@ export default function HomePage() {
       throw new Error(errorBody?.message || "Unable to generate financial voucher.");
     }
 
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
+    const data = (await response.json()) as AppBootstrapPayload;
 
     setRegistrations(data.registrations ?? []);
     setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -3594,6 +4910,7 @@ export default function HomePage() {
     setLots(data.lots ?? []);
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setStackAccommodations(data.stackAccommodations ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
     setReceipts(data.receipts ?? []);
     setFeatures({
@@ -3637,17 +4954,7 @@ export default function HomePage() {
       throw new Error(errorBody?.message || "Unable to mark voucher as paid.");
     }
 
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
+    const data = (await response.json()) as AppBootstrapPayload;
 
     setRegistrations(data.registrations ?? []);
     setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -3655,6 +4962,7 @@ export default function HomePage() {
     setLots(data.lots ?? []);
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setStackAccommodations(data.stackAccommodations ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
     setReceipts(data.receipts ?? []);
     setFeatures({
@@ -3714,17 +5022,7 @@ export default function HomePage() {
       throw new Error(errorBody?.message || "Unable to delete financial voucher.");
     }
 
-    const data = (await response.json()) as {
-      registrations: RegistrationRecord[];
-      godowns: Godown[];
-      stacks: Stack[];
-      lots: CertificationLot[];
-      discrepancies: IntakeDiscrepancy[];
-      discrepancyShifts: DiscrepancyShift[];
-      financialVouchers: FinancialVoucher[];
-      receipts: IntakeReceipt[];
-      features?: { discrepancyWorkflow?: boolean };
-    };
+    const data = (await response.json()) as AppBootstrapPayload;
 
     setRegistrations(data.registrations ?? []);
     setGodowns(data.godowns?.length ? data.godowns : defaultGodowns);
@@ -3732,6 +5030,7 @@ export default function HomePage() {
     setLots(data.lots ?? []);
     setDiscrepancies(data.discrepancies ?? []);
     setDiscrepancyShifts(data.discrepancyShifts ?? []);
+    setStackAccommodations(data.stackAccommodations ?? []);
     setFinancialVouchers(data.financialVouchers ?? []);
     setReceipts(data.receipts ?? []);
     setFeatures({
@@ -4886,6 +6185,18 @@ export default function HomePage() {
                   <strong>{organizerLinkedFarmerCount}</strong>
                 </div>
                 <div className="metricBox">
+                  <span>Organizer Expected Yield</span>
+                  <strong>{formatNumber(organizerExpectedYieldTotal)} QTL</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Organizer Deposited Qty</span>
+                  <strong>{formatNumber(organizerDepositedTotal)} QTL</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Organizer Pending Qty</span>
+                  <strong>{formatNumber(organizerPendingYieldTotal)} QTL</strong>
+                </div>
+                <div className="metricBox">
                   <span>Gross Organizer Commission</span>
                   <strong>{formatNumber(organizerGrossCommission)} INR</strong>
                 </div>
@@ -5026,6 +6337,95 @@ export default function HomePage() {
                           <tr>
                             <td colSpan={9} className="emptyStateCell">
                               No organizer commission record available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.organizerPerformance ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Organizer Wise Farmer Performance</h3>
+                      <p>Expected yield against deposited quantity organizer-wise</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("organizerPerformance")}
+                      >
+                        {dashboardExpandedSections.organizerPerformance ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("commission")}>
+                        Open Commission
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Organizer</th>
+                          <th>District</th>
+                          <th>Farmers</th>
+                          <th>Expected Yield</th>
+                          <th>Deposited</th>
+                          <th>Pending</th>
+                          <th>Status</th>
+                          <th>Coverage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleOrganizerPerformanceRows.length ? (
+                          visibleOrganizerPerformanceRows.map((row) => (
+                            <tr
+                              key={row.organizerId}
+                              className="clickableRow"
+                              onClick={() => openOrganizerLedger(row.organizerId)}
+                            >
+                              <td>{row.organizerName}</td>
+                              <td>{row.district || "-"}</td>
+                              <td>{row.farmerCount}</td>
+                              <td>{formatNumber(row.expectedYieldQtl)} QTL</td>
+                              <td>{formatNumber(row.depositedQtl)} QTL</td>
+                              <td>{formatNumber(row.pendingQtl)} QTL</td>
+                              <td>
+                                <div className="dashboardStatusCell">
+                                  <div className="dashboardStatusBar">
+                                    <div
+                                      className={`dashboardStatusFill ${
+                                        row.coveragePct >= 95
+                                          ? "dashboardStatusFillHigh"
+                                          : row.coveragePct >= 60
+                                            ? "dashboardStatusFillMedium"
+                                            : "dashboardStatusFillLow"
+                                      }`}
+                                      style={{ width: `${Math.max(Math.min(row.coveragePct, 100), 0)}%` }}
+                                    />
+                                  </div>
+                                  <small>
+                                    {row.depositedQtl > 0
+                                      ? `${formatNumber(row.depositedQtl)} / ${formatNumber(row.expectedYieldQtl)}`
+                                      : "No intake yet"}
+                                  </small>
+                                </div>
+                              </td>
+                              <td>{formatNumber(row.coveragePct)}%</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8} className="emptyStateCell">
+                              No organizer performance data is available yet.
                             </td>
                           </tr>
                         )}
@@ -6181,6 +7581,12 @@ export default function HomePage() {
                     always sorted by payment date.
                   </p>
                 )}
+                {isOrganizerFarmerPaymentReport && (
+                  <p className="mastersIntro">
+                    Organizer Wise Farmer Payment report groups farmer voucher position under the linked organizer.
+                    Farmers without organizer linkage are shown under `Direct Farmer`.
+                  </p>
+                )}
                 <div className="formGrid">
                   <label>
                     <span>Report Type</span>
@@ -6192,7 +7598,7 @@ export default function HomePage() {
                       ))}
                     </select>
                   </label>
-                  {!isPaymentRegisterReport && (
+                  {!isPaymentRegisterReport && !isOrganizerFarmerPaymentReport && (
                     <label>
                       <span>Season</span>
                       <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
@@ -6208,13 +7614,16 @@ export default function HomePage() {
                   </label>
                   <label>
                     <span>District</span>
-                    {isPaymentRegisterReport ? (
+                    {isPaymentRegisterReport || isOrganizerFarmerPaymentReport ? (
                       <select
                         value={reportDistrict}
                         onChange={(event) => {
                           setReportDistrict(event.target.value);
                           setReportVillage("");
                           setReportFarmerName("");
+                          if (isOrganizerFarmerPaymentReport) {
+                            setReportOrganizerName("");
+                          }
                         }}
                       >
                         <option value="">All Districts</option>
@@ -6228,9 +7637,22 @@ export default function HomePage() {
                       <input value={reportDistrict} onChange={(event) => setReportDistrict(event.target.value)} />
                     )}
                   </label>
-                  <label>
-                    <span>Farmer Name</span>
-                    {isPaymentRegisterReport ? (
+                  {isOrganizerFarmerPaymentReport ? (
+                    <label>
+                      <span>Organizer</span>
+                      <select value={reportOrganizerName} onChange={(event) => setReportOrganizerName(event.target.value)}>
+                        <option value="">All Organizers</option>
+                        {organizerReportOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Farmer Name</span>
+                      {isPaymentRegisterReport ? (
                       <select value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)}>
                         <option value="">All Farmers</option>
                         {paymentRegisterFarmerOptions.map((item) => (
@@ -6239,10 +7661,11 @@ export default function HomePage() {
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <input value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)} />
-                    )}
-                  </label>
+                      ) : (
+                        <input value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)} />
+                      )}
+                    </label>
+                  )}
                   {isPaymentRegisterReport ? (
                     <>
                       <label>
@@ -6272,6 +7695,13 @@ export default function HomePage() {
                             </option>
                           ))}
                         </select>
+                      </label>
+                    </>
+                  ) : isOrganizerFarmerPaymentReport ? (
+                    <>
+                      <label>
+                        <span>Season</span>
+                        <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
                       </label>
                     </>
                   ) : (
@@ -7077,87 +8507,455 @@ export default function HomePage() {
                   <span>{discrepancies.length} total discrepancy records</span>
                 </div>
                 {selectedDiscrepancy && (
-                  <div className="shiftPanel">
-                    <div className="panelHeader">
-                      <h3>Shift Excess Entry</h3>
-                      <span>{selectedDiscrepancy.discrepancyNo}</span>
-                    </div>
-                    <div className="selectedCard">
-                      <strong>{selectedDiscrepancy.cropRegistrationCode}</strong>
-                      <span>{selectedDiscrepancy.farmerName}</span>
-                      <span>
-                        Pending excess {formatNumber(selectedDiscrepancy.excessQtyQtl)} QTL /{" "}
-                        {selectedDiscrepancy.estimatedExcessBags} bags
-                      </span>
-                      <span>
-                        Source {selectedDiscrepancy.godownName} / Stack {selectedDiscrepancy.stackNo}
-                      </span>
-                    </div>
-                    <div className="formGrid compact">
-                      <label>
-                        <span>Target Godown</span>
-                        <select
-                          onChange={(event) => setShiftTargetGodownId(event.target.value)}
-                          value={shiftTargetGodownId}
-                        >
-                          {godowns.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Target Non-Cert Stack</span>
-                        <input
-                          onChange={(event) => setShiftTargetStackNo(event.target.value)}
-                          value={shiftTargetStackNo}
-                        />
-                      </label>
-                      <label>
-                        <span>Shift Qty (QTL)</span>
-                        <input
-                          onChange={(event) => setShiftQtyQtl(event.target.value)}
-                          type="number"
-                          value={shiftQtyQtl}
-                        />
-                      </label>
-                      <label>
-                        <span>Shift Bags</span>
-                        <input
-                          onChange={(event) => setShiftBags(event.target.value)}
-                          type="number"
-                          value={shiftBags}
-                        />
-                      </label>
-                      <label>
-                        <span>Shift Date</span>
-                        <input
-                          onChange={(event) => setShiftDate(event.target.value)}
-                          type="date"
-                          value={shiftDate}
-                        />
-                      </label>
-                      <label>
-                        <span>Approved By</span>
-                        <input
-                          onChange={(event) => setShiftApprovedBy(event.target.value)}
-                          value={shiftApprovedBy}
-                        />
-                      </label>
-                      <label className="spanTwo">
-                        <span>Shift Remarks</span>
-                        <input
-                          onChange={(event) => setShiftRemarks(event.target.value)}
-                          value={shiftRemarks}
-                        />
-                      </label>
-                    </div>
-                    <div className="actionsFooter">
-                      <button className="primaryButton" onClick={saveDiscrepancyShift} type="button">
-                        Save Shift Entry
+                  <div className="contentStack">
+                    <div className="workflowSwitchRow">
+                      <button
+                        className={discrepancyWorkflowMode === "accommodation" ? "primaryButton" : "secondaryButton"}
+                        onClick={() => setDiscrepancyWorkflowMode("accommodation")}
+                        type="button"
+                      >
+                        In-Stack Accommodation
+                      </button>
+                      <button
+                        className={discrepancyWorkflowMode === "shift" ? "primaryButton" : "secondaryButton"}
+                        onClick={() => setDiscrepancyWorkflowMode("shift")}
+                        type="button"
+                      >
+                        Physical Shift
                       </button>
                     </div>
+                    {discrepancyWorkflowMode === "shift" ? (
+                    <div className="shiftPanel">
+                      <div className="panelHeader">
+                        <h3>Shift Excess Entry</h3>
+                        <span>{selectedDiscrepancy.discrepancyNo}</span>
+                      </div>
+                      <div className="selectedCard">
+                        <strong>{selectedDiscrepancy.cropRegistrationCode}</strong>
+                        <span>{selectedDiscrepancy.farmerName}</span>
+                        <span>
+                          Pending excess {formatNumber(selectedDiscrepancy.excessQtyQtl)} QTL /{" "}
+                          {selectedDiscrepancy.estimatedExcessBags} bags
+                        </span>
+                        <span>
+                          Source {selectedDiscrepancy.godownName} / Stack {selectedDiscrepancy.stackNo}
+                        </span>
+                      </div>
+                      <div className="formGrid compact">
+                        <label>
+                          <span>Target Godown</span>
+                          <select
+                            onChange={(event) => setShiftTargetGodownId(event.target.value)}
+                            value={shiftTargetGodownId}
+                          >
+                            {godowns.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Target Non-Cert Stack</span>
+                          <input
+                            onChange={(event) => setShiftTargetStackNo(event.target.value)}
+                            value={shiftTargetStackNo}
+                          />
+                        </label>
+                        <label>
+                          <span>Shift Qty (QTL)</span>
+                          <input
+                            onChange={(event) => setShiftQtyQtl(event.target.value)}
+                            type="number"
+                            value={shiftQtyQtl}
+                          />
+                        </label>
+                        <label>
+                          <span>Shift Bags</span>
+                          <input
+                            onChange={(event) => setShiftBags(event.target.value)}
+                            type="number"
+                            value={shiftBags}
+                          />
+                        </label>
+                        <label>
+                          <span>Shift Date</span>
+                          <input
+                            onChange={(event) => setShiftDate(event.target.value)}
+                            type="date"
+                            value={shiftDate}
+                          />
+                        </label>
+                        <label>
+                          <span>Approved By</span>
+                          <input
+                            onChange={(event) => setShiftApprovedBy(event.target.value)}
+                            value={shiftApprovedBy}
+                          />
+                        </label>
+                        <label className="spanTwo">
+                          <span>Shift Remarks</span>
+                          <input
+                            onChange={(event) => setShiftRemarks(event.target.value)}
+                            value={shiftRemarks}
+                          />
+                        </label>
+                      </div>
+                      <div className="actionsFooter">
+                        <button className="primaryButton" onClick={saveDiscrepancyShift} type="button">
+                          Save Shift Entry
+                        </button>
+                      </div>
+                    </div>
+                    ) : null}
+                    {discrepancyWorkflowMode === "accommodation" ? (
+                    <div className="shiftPanel">
+                      <div className="panelHeader">
+                        <h3>In-Stack Accommodation Register</h3>
+                        <span>For this module only</span>
+                      </div>
+                      <div className="selectedCard">
+                        <span>
+                          Source: {selectedDiscrepancy.cropRegistrationCode} / {selectedDiscrepancy.farmerName}
+                        </span>
+                        <span>
+                          Mapped in module: {formatNumber(selectedDiscrepancyMappedQty)} QTL /{" "}
+                          {selectedDiscrepancyMappedBags} bags
+                        </span>
+                        <span>
+                          Remaining for module view: {formatNumber(selectedDiscrepancyRemainingForAccommodation)} QTL /{" "}
+                          {selectedDiscrepancyRemainingBagsForAccommodation} bags
+                        </span>
+                        <span>Same stack only: {selectedDiscrepancy.godownName} / {selectedDiscrepancy.stackNo}</span>
+                        <span>This does not change finance, intake, lots, or main stock position.</span>
+                      </div>
+                      <div className="formGrid compact">
+                        <label>
+                          <span>Target Farmer In Same Stack</span>
+                          <select
+                            onChange={(event) => setAccommodationTargetRegistrationId(event.target.value)}
+                            value={accommodationTargetRegistrationId}
+                          >
+                            <option value="">Select target farmer</option>
+                            {eligibleAccommodationTargets.map((item) => (
+                              <option key={item.registration.id} value={item.registration.id}>
+                                {item.registration.cropRegistrationCode} - {item.registration.farmerName}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Accommodation Qty (QTL)</span>
+                          <input
+                            onChange={(event) => setAccommodationQtyQtl(event.target.value)}
+                            type="number"
+                            value={accommodationQtyQtl}
+                          />
+                        </label>
+                        <label>
+                          <span>Accommodation Bags</span>
+                          <input
+                            onChange={(event) => setAccommodationBags(event.target.value)}
+                            type="number"
+                            value={accommodationBags}
+                          />
+                        </label>
+                        <label>
+                          <span>Accommodation Date</span>
+                          <input
+                            onChange={(event) => setAccommodationDate(event.target.value)}
+                            type="date"
+                            value={accommodationDate}
+                          />
+                        </label>
+                        <label className="spanTwo">
+                          <span>Accommodation Remarks</span>
+                          <input
+                            onChange={(event) => setAccommodationRemarks(event.target.value)}
+                            value={accommodationRemarks}
+                          />
+                        </label>
+                      </div>
+                      <div className="actionsFooter">
+                        <button className="primaryButton" onClick={saveStackAccommodation} type="button">
+                          {editingAccommodationId ? "Update Accommodation Mapping" : "Save Accommodation Mapping"}
+                        </button>
+                        {editingAccommodationId ? (
+                          <button
+                            className="secondaryButton"
+                            onClick={() => {
+                              setEditingAccommodationId("");
+                              setAccommodationTargetRegistrationId("");
+                              setAccommodationQtyQtl(String(selectedDiscrepancyRemainingForAccommodation || ""));
+                              setAccommodationBags(
+                                String(selectedDiscrepancyRemainingBagsForAccommodation || 0)
+                              );
+                              setAccommodationDate(new Date().toISOString().slice(0, 10));
+                              setAccommodationRemarks("");
+                            }}
+                            type="button"
+                          >
+                            Cancel Edit
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="tableWrap">
+                        <table className="registrationTable compactTable">
+                          <thead>
+                            <tr>
+                              <th>Target Reg. Code</th>
+                              <th>Target Farmer</th>
+                              <th>Village</th>
+                              <th>District</th>
+                              <th>Stack Qty</th>
+                              <th>Stack Bags</th>
+                              <th>Farmer Pending</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {eligibleAccommodationTargets.length ? (
+                              eligibleAccommodationTargets.map((item) => (
+                                <tr
+                                  key={item.registration.id}
+                                  className={
+                                    item.registration.id === accommodationTargetRegistrationId ? "rowActive" : ""
+                                  }
+                                >
+                                  <td>{item.registration.cropRegistrationCode}</td>
+                                  <td>{item.registration.farmerName}</td>
+                                  <td>{item.registration.village || "-"}</td>
+                                  <td>{item.registration.district || "-"}</td>
+                                  <td>{formatNumber(item.stackQtyQtl)} QTL</td>
+                                  <td>{item.stackBags}</td>
+                                  <td>{formatNumber(item.registration.balanceQtl)} QTL</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={7} className="emptyStateCell">
+                                  No eligible target farmer found in this same stack.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="tableWrap">
+                        <table className="registrationTable compactTable">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Source Reg. Code</th>
+                              <th>Source Farmer</th>
+                              <th>Target Reg. Code</th>
+                              <th>Target Farmer</th>
+                              <th>Adjusted Qty</th>
+                              <th>Adjusted Bags</th>
+                              <th>Remaining After Map</th>
+                              <th>Remarks</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedDiscrepancyAccommodations.length ? (
+                              selectedDiscrepancyAccommodations.map((item, index) => {
+                                const qtyAfterThisMap = roundQtl(
+                                  Number(selectedDiscrepancy.excessQtyQtl ?? 0) -
+                                    selectedDiscrepancyAccommodations
+                                      .slice(0, index + 1)
+                                      .reduce((sum, current) => sum + Number(current.adjustedQtyQtl ?? 0), 0)
+                                );
+                                return (
+                                <tr key={item.id}>
+                                  <td>{item.adjustmentDate}</td>
+                                  <td>{item.sourceRegistrationCode}</td>
+                                  <td>{item.sourceFarmerName}</td>
+                                  <td>{item.targetRegistrationCode}</td>
+                                  <td>{item.targetFarmerName}</td>
+                                  <td>{formatNumber(item.adjustedQtyQtl)} QTL</td>
+                                  <td>{item.adjustedBags}</td>
+                                  <td>{formatNumber(Math.max(qtyAfterThisMap, 0))} QTL</td>
+                                  <td>{item.remarks || "-"}</td>
+                                  <td>
+                                    <div className="actionButtons">
+                                      <button
+                                        className="secondaryButton smallButton"
+                                        onClick={() => beginEditStackAccommodation(item)}
+                                        type="button"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        className="secondaryButton smallButton"
+                                        onClick={() => deleteStackAccommodation(item)}
+                                        type="button"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={10} className="emptyStateCell">
+                                  No in-stack accommodation mapping saved for this discrepancy yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      {adjustedStackCardPreview ? (
+                        <section className="panel">
+                          <div className="panelHeader">
+                            <h3>Adjusted Stack Card Preview</h3>
+                            <span>
+                              {adjustedStackCardPreview.godownName} / {adjustedStackCardPreview.stackNo}
+                            </span>
+                          </div>
+                          <div className="selectedCard">
+                            <span>Godown: {adjustedStackCardPreview.godownName}</span>
+                            <span>Stack No.: {adjustedStackCardPreview.stackNo}</span>
+                            <span>Original Farmer Rows: {adjustedStackCardPreview.originalRows.length}</span>
+                            <span>Changed Farmers: {adjustedStackCardPreview.changedFarmerCount}</span>
+                            <span>For reference only. Does not alter main stock records.</span>
+                          </div>
+                          <div className="actionsFooter">
+                            <button
+                              className="secondaryButton"
+                              onClick={downloadAdjustedStackCardExcel}
+                              type="button"
+                            >
+                              Download Excel
+                            </button>
+                            <button
+                              className="secondaryButton"
+                              onClick={downloadAdjustedStackCardPdf}
+                              type="button"
+                            >
+                              Download PDF
+                            </button>
+                          </div>
+                          <div className="tableWrap">
+                            <table className="registrationTable compactTable">
+                              <thead>
+                                <tr>
+                                  <th colSpan={6}>Original Stack Position</th>
+                                </tr>
+                                <tr>
+                                  <th>S. No.</th>
+                                  <th>Reg. Code</th>
+                                  <th>Farmer Name</th>
+                                  <th>Village</th>
+                                  <th>Qty</th>
+                                  <th>Bags</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {adjustedStackCardPreview.originalRows.map((row, index) => (
+                                  <tr key={`original-${row.regCode}`}>
+                                    <td>{index + 1}</td>
+                                    <td>{row.regCode}</td>
+                                    <td>{row.farmerName}</td>
+                                    <td>{row.village}</td>
+                                    <td>{formatNumber(row.qtyQtl)} QTL</td>
+                                    <td>{row.bags}</td>
+                                  </tr>
+                                ))}
+                                <tr className="rowActive">
+                                  <td />
+                                  <td />
+                                  <td />
+                                  <td>TOTAL</td>
+                                  <td>
+                                    {formatNumber(
+                                      adjustedStackCardPreview.originalRows.reduce(
+                                        (sum, row) => sum + Number(row.qtyQtl ?? 0),
+                                        0
+                                      )
+                                    )}{" "}
+                                    QTL
+                                  </td>
+                                  <td>
+                                    {adjustedStackCardPreview.originalRows.reduce(
+                                      (sum, row) => sum + Number(row.bags ?? 0),
+                                      0
+                                    )}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="tableWrap">
+                            <table className="registrationTable compactTable">
+                              <thead>
+                                <tr>
+                                  <th colSpan={7}>Final Stack Position After Accommodation</th>
+                                </tr>
+                                <tr>
+                                  <th>S. No.</th>
+                                  <th>Reg. Code</th>
+                                  <th>Farmer Name</th>
+                                  <th>Village</th>
+                                  <th>Qty</th>
+                                  <th>Bags</th>
+                                  <th>Mark</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {adjustedStackCardPreview.adjustedRows.map((row, index) => (
+                                  <tr
+                                    key={`adjusted-${row.regCode}`}
+                                    className={row.changed ? "rowActive" : ""}
+                                  >
+                                    <td>{index + 1}</td>
+                                    <td>{row.regCode}</td>
+                                    <td>{row.farmerName}</td>
+                                    <td>{row.village}</td>
+                                    <td>{formatNumber(row.finalQtyQtl)} QTL</td>
+                                    <td>{row.finalBags}</td>
+                                    <td>{row.changed ? "*" : ""}</td>
+                                  </tr>
+                                ))}
+                                <tr className="rowActive">
+                                  <td />
+                                  <td />
+                                  <td />
+                                  <td>TOTAL</td>
+                                  <td>
+                                    {formatNumber(
+                                      adjustedStackCardPreview.adjustedRows.reduce(
+                                        (sum, row) => sum + Number(row.finalQtyQtl ?? 0),
+                                        0
+                                      )
+                                    )}{" "}
+                                    QTL
+                                  </td>
+                                  <td>
+                                    {adjustedStackCardPreview.adjustedRows.reduce(
+                                      (sum, row) => sum + Number(row.finalBags ?? 0),
+                                      0
+                                    )}
+                                  </td>
+                                  <td />
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="selectedCard">
+                            <span>Changed Farmers: {adjustedStackCardPreview.changedFarmerCount}</span>
+                            <span>
+                              Accommodated Qty: {formatNumber(adjustedStackCardPreview.totalAccommodatedQtyQtl)} QTL
+                            </span>
+                            <span>Accommodated Bags: {adjustedStackCardPreview.totalAccommodatedBags}</span>
+                            <span>* Marked rows indicate farmers affected in accommodation.</span>
+                          </div>
+                        </section>
+                      ) : null}
+                    </div>
+                    ) : null}
                   </div>
                 )}
                 <div className="tableWrap">
@@ -7192,7 +8990,14 @@ export default function HomePage() {
                           return left.discrepancyNo.localeCompare(right.discrepancyNo);
                         })
                         .map((item, index) => (
-                          <tr key={item.id}>
+                          <tr
+                            key={item.id}
+                            className={item.id === selectedDiscrepancyId ? "rowActive" : ""}
+                            onClick={() => {
+                              setSelectedDiscrepancyId(item.id);
+                              setDiscrepancyWorkflowMode("accommodation");
+                            }}
+                          >
                             <td>{index + 1}</td>
                             <td>{item.godownName}</td>
                             <td>{item.stackNo}</td>
@@ -7210,15 +9015,27 @@ export default function HomePage() {
                               </span>
                             </td>
                             <td>
-                              {item.status !== "RESOLVED" ? (
+                              <div className="actionButtons">
                                 <button
                                   className="secondaryButton smallButton"
-                                  onClick={() => startShiftEntry(item)}
+                                  onClick={() => {
+                                    setSelectedDiscrepancyId(item.id);
+                                    setDiscrepancyWorkflowMode("accommodation");
+                                  }}
                                   type="button"
                                 >
-                                  Shift Excess
+                                  Select
                                 </button>
-                              ) : null}
+                                {item.status !== "RESOLVED" ? (
+                                  <button
+                                    className="secondaryButton smallButton"
+                                    onClick={() => startShiftEntry(item)}
+                                    type="button"
+                                  >
+                                    Shift Excess
+                                  </button>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -7226,48 +9043,117 @@ export default function HomePage() {
                   </table>
                 </div>
               </section>
-              <section className="panel">
-                <div className="panelHeader">
-                  <h3>Shift History</h3>
-                  <span>{discrepancyShifts.length} saved shift entries</span>
-                </div>
-                <div className="tableWrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Discrepancy No.</th>
-                        <th>Reg. Code</th>
-                        <th>From Stack</th>
-                        <th>To Stack</th>
-                        <th>Shift Qty</th>
-                        <th>Shift Bags</th>
-                        <th>Shift Date</th>
-                        <th>Approved By</th>
-                        <th>Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {discrepancyShifts.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.discrepancyNo}</td>
-                          <td>{item.cropRegistrationCode}</td>
-                          <td>
-                            {item.fromGodownName} / {item.fromStackNo}
-                          </td>
-                          <td>
-                            {item.toGodownName} / {item.toStackNo}
-                          </td>
-                          <td>{formatNumber(item.shiftedQtyQtl)} QTL</td>
-                          <td>{item.shiftedBags}</td>
-                          <td>{item.shiftDate}</td>
-                          <td>{item.approvedBy || "-"}</td>
-                          <td>{item.remarks || "-"}</td>
+              {discrepancyWorkflowMode === "shift" ? (
+                <section className="panel">
+                  <div className="panelHeader">
+                    <h3>Shift History</h3>
+                    <span>{discrepancyShifts.length} saved shift entries</span>
+                  </div>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Discrepancy No.</th>
+                          <th>Reg. Code</th>
+                          <th>From Stack</th>
+                          <th>To Stack</th>
+                          <th>Shift Qty</th>
+                          <th>Shift Bags</th>
+                          <th>Shift Date</th>
+                          <th>Approved By</th>
+                          <th>Remarks</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                      </thead>
+                      <tbody>
+                        {discrepancyShifts.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.discrepancyNo}</td>
+                            <td>{item.cropRegistrationCode}</td>
+                            <td>
+                              {item.fromGodownName} / {item.fromStackNo}
+                            </td>
+                            <td>
+                              {item.toGodownName} / {item.toStackNo}
+                            </td>
+                            <td>{formatNumber(item.shiftedQtyQtl)} QTL</td>
+                            <td>{item.shiftedBags}</td>
+                            <td>{item.shiftDate}</td>
+                            <td>{item.approvedBy || "-"}</td>
+                            <td>{item.remarks || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ) : (
+                <section className="panel">
+                  <div className="panelHeader">
+                    <h3>Pending Accommodation Register</h3>
+                    <span>{pendingAccommodationRows.length} discrepancy row(s) still pending adjustment</span>
+                  </div>
+                  <p className="mastersIntro">
+                    This view shows only the discrepancy rows where accommodation is still pending. Completed
+                    accommodation mappings stay inside the selected discrepancy card only.
+                  </p>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Discrepancy No.</th>
+                          <th>Godown / Stack</th>
+                          <th>Reg. Code</th>
+                          <th>Farmer</th>
+                          <th>Excess Qty</th>
+                          <th>Mapped Qty</th>
+                          <th>Pending Qty</th>
+                          <th>Pending Bags</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingAccommodationRows.length ? (
+                          pendingAccommodationRows.map((item) => (
+                            <tr
+                              key={item.discrepancy.id}
+                              className={item.discrepancy.id === selectedDiscrepancyId ? "rowActive" : ""}
+                            >
+                              <td>{item.discrepancy.discrepancyNo}</td>
+                              <td>
+                                {item.discrepancy.godownName} / {item.discrepancy.stackNo}
+                              </td>
+                              <td>{item.discrepancy.cropRegistrationCode}</td>
+                              <td>{item.discrepancy.farmerName}</td>
+                              <td>{formatNumber(item.discrepancy.excessQtyQtl)} QTL</td>
+                              <td>{formatNumber(item.mappedQtyQtl)} QTL</td>
+                              <td>{formatNumber(item.remainingQtyQtl)} QTL</td>
+                              <td>{item.remainingBags}</td>
+                              <td>
+                                <button
+                                  className="secondaryButton smallButton"
+                                  onClick={() => {
+                                    setSelectedDiscrepancyId(item.discrepancy.id);
+                                    setDiscrepancyWorkflowMode("accommodation");
+                                  }}
+                                  type="button"
+                                >
+                                  Open Adjustment
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={9} className="emptyStateCell">
+                              No pending accommodation rows remain.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
             </div>
           )}
 

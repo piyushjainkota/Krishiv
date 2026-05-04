@@ -96,6 +96,23 @@ export const createDiscrepancyShiftSchema = z.object({
   remarks: z.string().optional().default("")
 });
 
+export const createStackAccommodationSchema = z.object({
+  discrepancyId: z.string().min(1),
+  targetRegistrationId: z.string().min(1),
+  adjustedQtyQtl: z.number().positive(),
+  adjustedBags: z.number().int().nonnegative().optional().default(0),
+  adjustmentDate: z.string().min(1),
+  remarks: z.string().optional().default("")
+});
+
+export const updateStackAccommodationSchema = createStackAccommodationSchema.extend({
+  adminPassword: z.string().optional().default("")
+});
+
+export const stackAccommodationActionSchema = z.object({
+  adminPassword: z.string().optional().default("")
+});
+
 export const createFinancialVoucherSchema = z.object({
   voucherDate: z.string().min(1),
   cropRegistrationId: z.string().min(1),
@@ -193,6 +210,9 @@ export type AssignRegistrationOrganizerInput = z.infer<typeof assignRegistration
 export type CreateReceiptInput = z.infer<typeof createReceiptSchema>;
 export type UpdateReceiptInput = z.infer<typeof updateReceiptSchema>;
 export type CreateDiscrepancyShiftInput = z.infer<typeof createDiscrepancyShiftSchema>;
+export type CreateStackAccommodationInput = z.infer<typeof createStackAccommodationSchema>;
+export type UpdateStackAccommodationInput = z.infer<typeof updateStackAccommodationSchema>;
+export type StackAccommodationActionInput = z.infer<typeof stackAccommodationActionSchema>;
 export type CreateFinancialVoucherInput = z.infer<typeof createFinancialVoucherSchema>;
 export type UpdateFinancialVoucherInput = z.infer<typeof updateFinancialVoucherSchema>;
 export type FinancialVoucherActionInput = z.infer<typeof financialVoucherActionSchema>;

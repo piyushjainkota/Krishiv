@@ -253,6 +253,30 @@ const DiscrepancyShiftSchema = new Schema(
   { timestamps: true }
 );
 
+const StackAccommodationSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    discrepancyId: { type: String, required: true, index: true },
+    discrepancyNo: { type: String, required: true, index: true },
+    sourceRegistrationId: { type: String, required: true, index: true },
+    sourceRegistrationCode: { type: String, required: true, index: true },
+    sourceFarmerName: { type: String, required: true },
+    targetRegistrationId: { type: String, required: true, index: true },
+    targetRegistrationCode: { type: String, required: true, index: true },
+    targetFarmerName: { type: String, required: true },
+    godownId: { type: String, required: true },
+    godownName: { type: String, required: true },
+    stackId: { type: String, required: true },
+    stackNo: { type: String, required: true },
+    adjustedQtyQtl: { type: Number, required: true },
+    adjustedBags: { type: Number, required: true, default: 0 },
+    adjustmentDate: { type: String, required: true },
+    remarks: { type: String, default: "" },
+    createdBy: { type: String, default: "" }
+  },
+  { timestamps: true }
+);
+
 const FinancialVoucherLineSchema = new Schema(
   {
     receiptId: { type: String, required: true },
@@ -393,6 +417,9 @@ export const DiscrepancyModel =
 export const DiscrepancyShiftModel =
   mongoose.models.DiscrepancyShift ??
   mongoose.model("DiscrepancyShift", DiscrepancyShiftSchema);
+export const StackAccommodationModel =
+  mongoose.models.StackAccommodation ??
+  mongoose.model("StackAccommodation", StackAccommodationSchema);
 export const NonCertificationStockMovementModel =
   mongoose.models.NonCertificationStockMovement ??
   mongoose.model("NonCertificationStockMovement", NonCertificationStockMovementSchema);

@@ -163,6 +163,28 @@ export interface DiscrepancyShift {
   createdAt: string;
 }
 
+export interface StackAccommodation {
+  id: string;
+  discrepancyId: string;
+  discrepancyNo: string;
+  sourceRegistrationId: string;
+  sourceRegistrationCode: string;
+  sourceFarmerName: string;
+  targetRegistrationId: string;
+  targetRegistrationCode: string;
+  targetFarmerName: string;
+  godownId: string;
+  godownName: string;
+  stackId: string;
+  stackNo: string;
+  adjustedQtyQtl: number;
+  adjustedBags: number;
+  adjustmentDate: string;
+  remarks: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
 export interface FinancialVoucherLine {
   receiptId: string;
   receiptNo: string;

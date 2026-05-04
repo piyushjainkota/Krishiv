@@ -487,6 +487,50 @@ th {
   grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
 }
 
+.dashboardAssistantPanel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(116, 84, 46, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(250, 247, 241, 0.96), rgba(255, 255, 255, 0.98)),
+    var(--panel);
+}
+
+.dashboardAssistantHeader {
+  align-items: flex-start;
+}
+
+.dashboardAssistantHeader p,
+.dashboardAssistantSummary p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.dashboardAssistantForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.dashboardAssistantSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboardAssistantResult {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboardAssistantSummary {
+  padding: 10px 12px;
+  border: 1px solid #eadfce;
+  border-radius: 10px;
+  background: #fffaf3;
+}
+
 .dashboardBoard {
   display: grid;
   gap: 14px;
@@ -533,6 +577,40 @@ th {
 
 .dashboardCard .tableWrap {
   margin-top: 0;
+}
+
+.dashboardStatusCell {
+  min-width: 140px;
+}
+
+.dashboardStatusBar {
+  height: 8px;
+  border-radius: 999px;
+  background: #eee4d6;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.dashboardStatusFill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.dashboardStatusFillHigh {
+  background: linear-gradient(90deg, #2d8a4f, #5fa96f);
+}
+
+.dashboardStatusFillMedium {
+  background: linear-gradient(90deg, #a86f2e, #cf9548);
+}
+
+.dashboardStatusFillLow {
+  background: linear-gradient(90deg, #8d3e32, #c46d59);
+}
+
+.dashboardStatusCell small {
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 .dashboardCard .registrationTable th {
@@ -904,6 +982,12 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.workflowSwitchRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .smallButton {
@@ -1343,7 +1427,8 @@ th {
 
   .dashboardHero,
   .dashboardHeroCard,
-  .dashboardProgressCard {
+  .dashboardProgressCard,
+  .dashboardAssistantPanel {
     padding: 16px;
   }
 
@@ -1358,5 +1443,9 @@ th {
 
   .tableWrap {
     margin: 0 -2px;
+  }
+
+  .dashboardAssistantForm {
+    grid-template-columns: 1fr;
   }
 }

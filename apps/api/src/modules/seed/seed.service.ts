@@ -12,6 +12,7 @@ import type {
   BackupDatabaseInput,
   CreateOrganizerInput,
   CreateDiscrepancyShiftInput,
+  CreateStackAccommodationInput,
   CreateFinancialVoucherInput,
   CreateGodownInput,
   CreateReceiptInput,
@@ -25,6 +26,7 @@ import type {
   UpdateOrganizerPaymentInput,
   UpdateFinancialVoucherPaymentInput,
   UpdateFinancialVoucherInput,
+  UpdateStackAccommodationInput,
   UpdateReceiptInput
 } from "./seed.schemas";
 import { config } from "../../config";
@@ -42,6 +44,7 @@ import {
   OrganizerPaymentModel,
   ReceiptModel,
   RegistrationModel,
+  StackAccommodationModel,
   StackModel,
   UserModel
 } from "../../models/seed.models";
@@ -232,6 +235,9 @@ function deriveRegistrationStatus(params: {
 }
 
 function deriveVoucherStatus(finalPayableAmount: number, totalPaidAmount: number) {
+  if (finalPayableAmount < 0) {
+    return "OVERPAID";
+  }
   if (totalPaidAmount <= 0) {
     return "DRAFT";
   }
@@ -719,6 +725,24 @@ export class SeedService {
     }
   }
 
+  private async assertStackAccommodationEditable(
+    accommodation: { createdBy?: string },
+    actor: ActorUser,
+    adminPassword?: string
+  ) {
+    const creator = String(accommodation.createdBy ?? "").trim().toLowerCase();
+    if (actor.role !== "ADMIN" && creator && creator !== actor.email.trim().toLowerCase()) {
+      if (!adminPassword) {
+        throw new Error("Only the original mapping user or admin can edit this accommodation entry.");
+      }
+      await this.verifyAdminPassword(adminPassword);
+      return;
+    }
+    if (actor.role === "ADMIN" && adminPassword) {
+      await this.verifyAdminPassword(adminPassword);
+    }
+  }
+
   private async getOrganizerCommissionPosition(organizerId: string, excludedPaymentId = "") {
     const [organizer, linkedRegistrations, organizerPayments] = await Promise.all([
       OrganizerModel.findOne({ id: organizerId })
@@ -937,11 +961,20 @@ export class SeedService {
 
   async bootstrapOperational() {
     await this.ensureCompatibility();
-    const [lots, receipts, discrepancies, discrepancyShifts, financialVouchers, organizerPayments] = await Promise.all([
+    const [
+      lots,
+      receipts,
+      discrepancies,
+      discrepancyShifts,
+      stackAccommodations,
+      financialVouchers,
+      organizerPayments
+    ] = await Promise.all([
       LotModel.find().sort({ lotCode: 1 }).lean(),
       ReceiptModel.find().sort({ createdAt: -1 }).lean(),
       DiscrepancyModel.find().sort({ createdAt: -1 }).lean(),
       DiscrepancyShiftModel.find().sort({ createdAt: -1 }).lean(),
+      StackAccommodationModel.find().sort({ adjustmentDate: -1, createdAt: -1 }).lean(),
       FinancialVoucherModel.find().sort({ createdAt: -1 }).lean(),
       OrganizerPaymentModel.find().sort({ paymentDate: -1, createdAt: -1 }).lean()
     ]);
@@ -951,6 +984,7 @@ export class SeedService {
       receipts,
       discrepancies,
       discrepancyShifts,
+      stackAccommodations,
       financialVouchers,
       organizerPayments,
       features: {
@@ -2255,6 +2289,225 @@ export class SeedService {
     });
   }
 
+  async createStackAccommodation(input: CreateStackAccommodationInput, actor?: ActorUser) {
+    await this.ensureCompatibility();
+
+    const discrepancy = await DiscrepancyModel.findOne({ id: input.discrepancyId }).lean();
+    if (!discrepancy) {
+      throw new Error("Discrepancy record not found.");
+    }
+    if (discrepancy.status === "RESOLVED") {
+      throw new Error("Resolved discrepancy cannot be accommodated.");
+    }
+
+    const targetRegistration = await RegistrationModel.findOne({ id: input.targetRegistrationId }).lean();
+    if (!targetRegistration) {
+      throw new Error("Target registration not found.");
+    }
+    if (targetRegistration.id === discrepancy.cropRegistrationId) {
+      throw new Error("Source and target farmer cannot be the same.");
+    }
+
+    const targetReceipts = await ReceiptModel.find({
+      cropRegistrationId: targetRegistration.id,
+      "lines.godownId": discrepancy.godownId,
+      "lines.stackNo": discrepancy.stackNo
+    }).lean();
+    if (targetReceipts.length === 0) {
+      throw new Error("Target farmer has no intake record in the same source stack.");
+    }
+
+    const existingAccommodations = await StackAccommodationModel.find({
+      discrepancyId: discrepancy.id
+    }).lean();
+    const alreadyMappedQty = roundQtl(
+      existingAccommodations.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+    );
+    const alreadyMappedBags = existingAccommodations.reduce(
+      (sum, item) => sum + Number(item.adjustedBags ?? 0),
+      0
+    );
+    const remainingQty = roundQtl(Number(discrepancy.excessQtyQtl ?? 0) - alreadyMappedQty);
+    const remainingBags = Math.max(Number(discrepancy.estimatedExcessBags ?? 0) - alreadyMappedBags, 0);
+
+    if (input.adjustedQtyQtl > remainingQty) {
+      throw new Error(`Accommodation qty exceeds remaining discrepancy qty of ${remainingQty.toFixed(2)} QTL.`);
+    }
+    if (input.adjustedBags > remainingBags) {
+      throw new Error(`Accommodation bags exceed remaining discrepancy bags of ${remainingBags}.`);
+    }
+
+    await StackAccommodationModel.create({
+      id: randomUUID(),
+      discrepancyId: discrepancy.id,
+      discrepancyNo: discrepancy.discrepancyNo,
+      sourceRegistrationId: discrepancy.cropRegistrationId,
+      sourceRegistrationCode: discrepancy.cropRegistrationCode,
+      sourceFarmerName: discrepancy.farmerName,
+      targetRegistrationId: targetRegistration.id,
+      targetRegistrationCode: targetRegistration.cropRegistrationCode,
+      targetFarmerName: targetRegistration.farmerName,
+      godownId: discrepancy.godownId,
+      godownName: discrepancy.godownName,
+      stackId: discrepancy.stackId,
+      stackNo: discrepancy.stackNo,
+      adjustedQtyQtl: roundQtl(input.adjustedQtyQtl),
+      adjustedBags: Number(input.adjustedBags ?? 0),
+      adjustmentDate: input.adjustmentDate,
+      remarks: input.remarks?.trim() || "",
+      createdBy: actor?.email ?? ""
+    });
+
+    await AuditLogModel.create({
+      entityType: "STACK_ACCOMMODATION",
+      entityId: discrepancy.id,
+      action: "CREATED",
+      payload: {
+        discrepancyId: discrepancy.id,
+        discrepancyNo: discrepancy.discrepancyNo,
+        sourceRegistrationCode: discrepancy.cropRegistrationCode,
+        targetRegistrationCode: targetRegistration.cropRegistrationCode,
+        adjustedQtyQtl: roundQtl(input.adjustedQtyQtl),
+        adjustedBags: Number(input.adjustedBags ?? 0),
+        adjustmentDate: input.adjustmentDate,
+        remarks: input.remarks?.trim() || "",
+        createdBy: actor?.email ?? ""
+      }
+    });
+
+    return this.bootstrap();
+  }
+
+  async updateStackAccommodation(
+    accommodationId: string,
+    input: UpdateStackAccommodationInput,
+    actor: ActorUser
+  ) {
+    await this.ensureCompatibility();
+
+    const accommodation = await StackAccommodationModel.findOne({ id: accommodationId }).lean();
+    if (!accommodation) {
+      throw new Error("Accommodation entry not found.");
+    }
+    await this.assertStackAccommodationEditable(accommodation, actor, input.adminPassword);
+
+    const discrepancy = await DiscrepancyModel.findOne({ id: input.discrepancyId }).lean();
+    if (!discrepancy) {
+      throw new Error("Discrepancy record not found.");
+    }
+    if (discrepancy.status === "RESOLVED") {
+      throw new Error("Resolved discrepancy cannot be accommodated.");
+    }
+
+    const targetRegistration = await RegistrationModel.findOne({ id: input.targetRegistrationId }).lean();
+    if (!targetRegistration) {
+      throw new Error("Target registration not found.");
+    }
+    if (targetRegistration.id === discrepancy.cropRegistrationId) {
+      throw new Error("Source and target farmer cannot be the same.");
+    }
+
+    const targetReceipts = await ReceiptModel.find({
+      cropRegistrationId: targetRegistration.id,
+      "lines.godownId": discrepancy.godownId,
+      "lines.stackNo": discrepancy.stackNo
+    }).lean();
+    if (targetReceipts.length === 0) {
+      throw new Error("Target farmer has no intake record in the same source stack.");
+    }
+
+    const existingAccommodations = await StackAccommodationModel.find({
+      discrepancyId: discrepancy.id,
+      id: { $ne: accommodationId }
+    }).lean();
+    const alreadyMappedQty = roundQtl(
+      existingAccommodations.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+    );
+    const alreadyMappedBags = existingAccommodations.reduce(
+      (sum, item) => sum + Number(item.adjustedBags ?? 0),
+      0
+    );
+    const remainingQty = roundQtl(Number(discrepancy.excessQtyQtl ?? 0) - alreadyMappedQty);
+    const remainingBags = Math.max(Number(discrepancy.estimatedExcessBags ?? 0) - alreadyMappedBags, 0);
+
+    if (input.adjustedQtyQtl > remainingQty) {
+      throw new Error(`Accommodation qty exceeds remaining discrepancy qty of ${remainingQty.toFixed(2)} QTL.`);
+    }
+    if (input.adjustedBags > remainingBags) {
+      throw new Error(`Accommodation bags exceed remaining discrepancy bags of ${remainingBags}.`);
+    }
+
+    await StackAccommodationModel.updateOne(
+      { id: accommodationId },
+      {
+        $set: {
+          discrepancyId: discrepancy.id,
+          discrepancyNo: discrepancy.discrepancyNo,
+          sourceRegistrationId: discrepancy.cropRegistrationId,
+          sourceRegistrationCode: discrepancy.cropRegistrationCode,
+          sourceFarmerName: discrepancy.farmerName,
+          targetRegistrationId: targetRegistration.id,
+          targetRegistrationCode: targetRegistration.cropRegistrationCode,
+          targetFarmerName: targetRegistration.farmerName,
+          godownId: discrepancy.godownId,
+          godownName: discrepancy.godownName,
+          stackId: discrepancy.stackId,
+          stackNo: discrepancy.stackNo,
+          adjustedQtyQtl: roundQtl(input.adjustedQtyQtl),
+          adjustedBags: Number(input.adjustedBags ?? 0),
+          adjustmentDate: input.adjustmentDate,
+          remarks: input.remarks?.trim() || ""
+        }
+      }
+    );
+
+    await AuditLogModel.create({
+      entityType: "STACK_ACCOMMODATION",
+      entityId: accommodationId,
+      action: "UPDATED",
+      payload: {
+        discrepancyId: discrepancy.id,
+        discrepancyNo: discrepancy.discrepancyNo,
+        sourceRegistrationCode: discrepancy.cropRegistrationCode,
+        targetRegistrationCode: targetRegistration.cropRegistrationCode,
+        adjustedQtyQtl: roundQtl(input.adjustedQtyQtl),
+        adjustedBags: Number(input.adjustedBags ?? 0),
+        adjustmentDate: input.adjustmentDate,
+        remarks: input.remarks?.trim() || "",
+        updatedBy: actor.email
+      }
+    });
+
+    return this.bootstrap();
+  }
+
+  async deleteStackAccommodation(accommodationId: string, actor: ActorUser) {
+    await this.ensureCompatibility();
+    const accommodation = await StackAccommodationModel.findOne({ id: accommodationId }).lean();
+    if (!accommodation) {
+      throw new Error("Accommodation entry not found.");
+    }
+    await this.assertStackAccommodationEditable(accommodation, actor);
+
+    await StackAccommodationModel.deleteOne({ id: accommodationId });
+    await AuditLogModel.create({
+      entityType: "STACK_ACCOMMODATION",
+      entityId: accommodationId,
+      action: "DELETED",
+      payload: {
+        discrepancyId: accommodation.discrepancyId,
+        discrepancyNo: accommodation.discrepancyNo,
+        sourceRegistrationCode: accommodation.sourceRegistrationCode,
+        targetRegistrationCode: accommodation.targetRegistrationCode,
+        adjustedQtyQtl: roundQtl(Number(accommodation.adjustedQtyQtl ?? 0)),
+        adjustedBags: Number(accommodation.adjustedBags ?? 0),
+        deletedBy: actor.email
+      }
+    });
+
+    return this.bootstrap();
+  }
+
   private async buildFinancialVoucherPreview(
     input: CreateFinancialVoucherInput | UpdateFinancialVoucherInput,
     existingVoucher?: FinancialVoucherRecord | null
@@ -2325,9 +2578,7 @@ export class SeedService {
     const certifiedAmount = roundQtl(certifiedQtyQtl * input.certifiedRatePerQtl);
     const discrepancyAmount = roundQtl(discrepancyQtyQtl * input.discrepancyRatePerQtl);
     const grossPayableAmount = roundQtl(certifiedAmount + discrepancyAmount);
-    const netPayableAmount = roundQtl(
-      Math.max(grossPayableAmount - Number(input.deductionAmount ?? 0), 0)
-    );
+    const netPayableAmount = roundQtl(grossPayableAmount - Number(input.deductionAmount ?? 0));
     const finalPayableAmount = Math.round(netPayableAmount);
     const roundedOffAmount = roundQtl(finalPayableAmount - netPayableAmount);
     const paymentSummary = this.buildVoucherPaymentSummary(existingPayments, finalPayableAmount);

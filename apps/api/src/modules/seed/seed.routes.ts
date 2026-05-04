@@ -5,6 +5,7 @@ import {
   assignRegistrationOrganizerSchema,
   backupDatabaseSchema,
   createDiscrepancyShiftSchema,
+  createStackAccommodationSchema,
   createFinancialVoucherSchema,
   createGodownSchema,
   createOrganizerSchema,
@@ -15,10 +16,12 @@ import {
   loginSchema,
   reportFilterSchema,
   restoreDatabaseSchema,
+  stackAccommodationActionSchema,
   updateOrganizerPaymentSchema,
   updateOrganizerSchema,
   updateFinancialVoucherPaymentSchema,
   updateFinancialVoucherSchema,
+  updateStackAccommodationSchema,
   updateReceiptSchema
 } from "./seed.schemas";
 import { SeedService } from "./seed.service";
@@ -209,6 +212,65 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       return reply.status(400).send(parsed.error.flatten());
     }
     return seedService.createDiscrepancyShift(parsed.data);
+  });
+
+  app.post("/api/seed/discrepancies/accommodations", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = createStackAccommodationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+      permissions: { canShift: boolean };
+    };
+    if (!actor.permissions.canShift) {
+      return reply.status(403).send({ message: "Your role cannot save stack accommodation." });
+    }
+    return seedService.createStackAccommodation(parsed.data, actor.user);
+  });
+
+  app.put("/api/seed/discrepancies/accommodations/:accommodationId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = updateStackAccommodationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+      permissions: { canShift: boolean };
+    };
+    if (!actor.permissions.canShift) {
+      return reply.status(403).send({ message: "Your role cannot edit stack accommodation." });
+    }
+    const accommodationId = String((request.params as { accommodationId: string }).accommodationId);
+    return seedService.updateStackAccommodation(accommodationId, parsed.data, actor.user);
+  });
+
+  app.delete("/api/seed/discrepancies/accommodations/:accommodationId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN", "MANAGER"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const parsed = stackAccommodationActionSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send(parsed.error.flatten());
+    }
+    const actor = denied as {
+      user: { email: string; role: AppRole };
+      permissions: { canShift: boolean };
+    };
+    if (!actor.permissions.canShift) {
+      return reply.status(403).send({ message: "Your role cannot delete stack accommodation." });
+    }
+    const accommodationId = String((request.params as { accommodationId: string }).accommodationId);
+    return seedService.deleteStackAccommodation(accommodationId, actor.user);
   });
 
   app.post("/api/seed/financial-vouchers", async (request, reply) => {
