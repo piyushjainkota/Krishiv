@@ -83,6 +83,13 @@ th {
   margin: 0 0 8px;
 }
 
+.loginLogo {
+  display: block;
+  width: min(260px, 72vw);
+  height: auto;
+  margin-bottom: 10px;
+}
+
 .loginTitleBlock p,
 .loginError {
   margin: 0;
@@ -100,6 +107,23 @@ th {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.topBarBrand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topBarLogo {
+  width: 132px;
+  height: 50px;
+  object-fit: contain;
+  background: white;
+  border-radius: 6px;
+  padding: 4px 7px;
+  flex: 0 0 auto;
 }
 
 .topBar h1,
@@ -153,7 +177,7 @@ th {
 
 .sidebarBrand {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: flex-start;
 }
 
@@ -167,6 +191,17 @@ th {
   color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.sidebarLogo {
+  width: 82px;
+  height: 34px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid rgba(140, 68, 28, 0.18);
+  border-radius: 6px;
+  padding: 3px 5px;
+  flex: 0 0 auto;
 }
 
 .seal {
@@ -1108,6 +1143,13 @@ th {
   text-align: center;
   font-weight: 700;
   line-height: 1.6;
+}
+
+.slipClassicLogo {
+  display: block;
+  width: 148px;
+  height: auto;
+  margin: 0 auto 4px;
 }
 
 .slipClassicMeta {

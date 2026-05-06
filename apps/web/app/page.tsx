@@ -59,6 +59,8 @@ const API_BASE =
   (typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.hostname}:4000`
     : "http://127.0.0.1:4000");
+const BRAND_LOGO_SRC = "/krishiv-logo.svg";
+const COMPANY_NAME = "KRISHIV AGRI GENETICS LLP";
 const IMPORT_PAGE_SIZE = 20;
 type ImportSortKey = "farmerName" | "village" | "classStage";
 type RegistrationSortKey =
@@ -97,6 +99,18 @@ type OrganizerPerformanceRow = {
   depositedQtl: number;
   pendingQtl: number;
   coveragePct: number;
+};
+
+type OrganizerFarmerPaymentPendingRow = {
+  organizerId: string;
+  organizerName: string;
+  district: string;
+  farmerCount: number;
+  voucherCount: number;
+  netPayableAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  overpaidCount: number;
 };
 
   const navSections: {
@@ -201,6 +215,9 @@ type ReportType =
   | "DAILY_INTAKE_REGISTER"
   | "CUSTOM_DATE_PAYMENT_REGISTER"
   | "ORGANIZER_FARMER_PAYMENT_REGISTER"
+  | "OVERPAID_FARMER_REPORT"
+  | "RECEIPT_VOUCHER_TRACEABILITY_REPORT"
+  | "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
   | "STACK_WISE_STOCK_POSITION"
@@ -218,6 +235,26 @@ type ReportPreview = {
   totals: Record<string, string | number>;
   generatedAt: string;
   fileName: string;
+};
+
+type StackCardRegisterSection = {
+  key: string;
+  godownId: string;
+  godownName: string;
+  stackNo: string;
+  displayMode: "ORIGINAL" | "FINAL_ADJUSTED";
+  rows: {
+    regCode: string;
+    farmerName: string;
+    village: string;
+    district: string;
+    qtyQtl: number;
+    bags: number;
+    mark: string;
+  }[];
+  totalQtyQtl: number;
+  totalBags: number;
+  changedFarmerCount: number;
 };
 
 type DashboardAssistantResult = {
@@ -327,6 +364,9 @@ const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "DAILY_INTAKE_REGISTER", label: "Daily Intake Register" },
   { value: "CUSTOM_DATE_PAYMENT_REGISTER", label: "Custom Date Payment Register" },
   { value: "ORGANIZER_FARMER_PAYMENT_REGISTER", label: "Organizer Wise Farmer Payment" },
+  { value: "OVERPAID_FARMER_REPORT", label: "Overpaid Farmer Report" },
+  { value: "RECEIPT_VOUCHER_TRACEABILITY_REPORT", label: "Receipt to Voucher Traceability" },
+  { value: "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT", label: "Organizer Intake vs Payment vs Commission" },
   { value: "REGISTRATION_PENDING_RECEIVED", label: "Registration Pending vs Received" },
   { value: "LOT_WISE_STOCK_LEDGER", label: "Lot-wise Stock Ledger" },
   { value: "STACK_WISE_STOCK_POSITION", label: "Stack-wise Stock Position" },
@@ -424,6 +464,63 @@ function formatDateDisplay(value: string) {
   }
 
   return `${day}-${month}-${year}`;
+}
+
+function drawKrishivPdfLogo(doc: jsPDF, x: number, y: number, scale = 1) {
+  doc.setFont("times", "bold");
+  doc.setFontSize(19 * scale);
+  doc.setTextColor(242, 140, 34);
+  doc.text("K", x, y + 11 * scale);
+  doc.setTextColor(0, 138, 100);
+  doc.rect(x + 5.8 * scale, y + 1.4 * scale, 2.2 * scale, 10.6 * scale, "F");
+  doc.setFillColor(139, 197, 64);
+  doc.ellipse(x + 11.5 * scale, y + 2.6 * scale, 5.5 * scale, 2.5 * scale, "F");
+  doc.setTextColor(242, 140, 34);
+  doc.text("ri", x + 13 * scale, y + 11 * scale);
+  doc.setTextColor(7, 150, 184);
+  doc.text("shiv", x + 27 * scale, y + 11 * scale);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(5.8 * scale);
+  doc.setTextColor(45, 45, 45);
+  doc.text("SEEDS", x + 44 * scale, y + 16 * scale);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont("helvetica", "normal");
+}
+
+function renderPdfBrandHeader(
+  doc: jsPDF,
+  title: string,
+  options: { left: number; right: number; y: number; compact?: boolean; logoDataUrl?: string }
+) {
+  const { left, right, compact = false, logoDataUrl = "" } = options;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = options.y;
+  const scale = compact ? 0.86 : 1;
+  const logoWidth = (compact ? 43 : 52) * scale;
+  const logoHeight = logoWidth / 2.385;
+
+  doc.setDrawColor(91, 61, 38);
+  doc.setLineWidth(0.3);
+  doc.line(left, y, right, y);
+  y += compact ? 2.6 : 3.6;
+  if (logoDataUrl) {
+    doc.addImage(logoDataUrl, "PNG", pageWidth / 2 - logoWidth / 2, y, logoWidth, logoHeight);
+  } else {
+    drawKrishivPdfLogo(doc, pageWidth / 2 - 66 * scale / 2, y, scale);
+  }
+  y += logoHeight + (compact ? 2.8 : 3.6);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(compact ? 7.6 : 8.6);
+  doc.setTextColor(91, 61, 38);
+  doc.text(COMPANY_NAME, pageWidth / 2, y, { align: "center" });
+  y += compact ? 4 : 4.6;
+  doc.setFontSize(compact ? 8.6 : 10.2);
+  doc.setTextColor(0, 0, 0);
+  doc.text(title, pageWidth / 2, y, { align: "center" });
+  y += compact ? 3.2 : 4;
+  doc.line(left, y, right, y);
+  y += compact ? 4.2 : 5.2;
+  return y;
 }
 
 function truncateToTwoDecimals(value: number): number {
@@ -560,6 +657,7 @@ export default function HomePage() {
   });
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [currentPermissions, setCurrentPermissions] = useState<RolePermissions | null>(null);
+  const [pdfLogoDataUrl, setPdfLogoDataUrl] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -660,6 +758,7 @@ export default function HomePage() {
     districts: false,
     godowns: false,
     organizers: false,
+    organizerFarmerPending: false,
     organizerPerformance: false,
     organizerNoIntake: false,
     pendingRegistrations: false,
@@ -890,6 +989,18 @@ export default function HomePage() {
     if (typeof window === "undefined") {
       return;
     }
+    void fetch(BRAND_LOGO_SRC)
+      .then((response) => (response.ok ? response.text() : ""))
+      .then((svgText) => {
+        const matchedLogo = svgText.match(/xlink:href="(data:image\/png;base64,[^"]+)"/i);
+        if (matchedLogo?.[1]) {
+          setPdfLogoDataUrl(matchedLogo[1]);
+        }
+      })
+      .catch(() => {
+        setPdfLogoDataUrl("");
+      });
+
     const raw = window.localStorage.getItem("krishiv-auth");
     if (!raw) {
       return;
@@ -1076,6 +1187,11 @@ export default function HomePage() {
   const todayReceiptNet = todayReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
   const isPaymentRegisterReport = reportType === "CUSTOM_DATE_PAYMENT_REGISTER";
   const isOrganizerFarmerPaymentReport = reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER";
+  const isOverpaidFarmerReport = reportType === "OVERPAID_FARMER_REPORT";
+  const isReceiptVoucherTraceabilityReport = reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT";
+  const isOrganizerIntakePaymentCommissionReport =
+    reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT";
+  const isStackCardRegisterReport = reportType === "STACK_CARD_REGISTER";
   const paymentRegisterDistrictOptions = Array.from(
     new Set(financialVouchers.map((item) => item.district?.trim()).filter(Boolean))
   ).sort((left, right) => String(left).localeCompare(String(right), "en", { sensitivity: "base" }));
@@ -1221,6 +1337,74 @@ export default function HomePage() {
   const organizerNoIntakePendingQty = roundQtl(
     organizerNoIntakeRows.reduce((sum, row) => sum + row.zeroIntakePendingQty, 0)
   );
+  const organizerFarmerPaymentPendingRows: OrganizerFarmerPaymentPendingRow[] = Array.from(
+    financialVouchers.reduce((map, voucher) => {
+      const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+      const organizerId = String(registration?.organizerId ?? "").trim() || "direct-farmer";
+      const organizerName = String(registration?.organizerName ?? "").trim() || "Direct Farmer";
+      const organizerRecord = organizerById.get(organizerId);
+      const current = map.get(organizerId) ?? {
+        organizerId,
+        organizerName: organizerRecord?.name || organizerName,
+        district: organizerRecord?.district || registration?.district || voucher.district || "-",
+        farmerCodes: new Set<string>(),
+        voucherCount: 0,
+        netPayableAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        overpaidCount: 0
+      };
+
+      current.farmerCodes.add(voucher.cropRegistrationCode);
+      current.voucherCount += 1;
+      current.netPayableAmount = roundQtl(current.netPayableAmount + getVoucherFinalPayable(voucher));
+      current.paidAmount = roundQtl(current.paidAmount + getVoucherTotalPaid(voucher));
+      current.pendingAmount = roundQtl(current.pendingAmount + Math.max(getVoucherBalance(voucher), 0));
+      if (getVoucherBalance(voucher) < 0 || voucher.status === "OVERPAID") {
+        current.overpaidCount += 1;
+      }
+
+      map.set(organizerId, current);
+      return map;
+    }, new Map<
+      string,
+      {
+        organizerId: string;
+        organizerName: string;
+        district: string;
+        farmerCodes: Set<string>;
+        voucherCount: number;
+        netPayableAmount: number;
+        paidAmount: number;
+        pendingAmount: number;
+        overpaidCount: number;
+      }
+    >())
+      .values()
+  )
+    .map((row) => ({
+      organizerId: row.organizerId,
+      organizerName: row.organizerName,
+      district: row.district,
+      farmerCount: row.farmerCodes.size,
+      voucherCount: row.voucherCount,
+      netPayableAmount: roundQtl(row.netPayableAmount),
+      paidAmount: roundQtl(row.paidAmount),
+      pendingAmount: roundQtl(row.pendingAmount),
+      overpaidCount: row.overpaidCount
+    }))
+    .sort((left, right) => {
+      if (right.pendingAmount !== left.pendingAmount) {
+        return right.pendingAmount - left.pendingAmount;
+      }
+      return left.organizerName.localeCompare(right.organizerName, "en", { sensitivity: "base" });
+    });
+  const visibleOrganizerFarmerPaymentPendingRows = dashboardExpandedSections.organizerFarmerPending
+    ? organizerFarmerPaymentPendingRows
+    : organizerFarmerPaymentPendingRows.slice(0, 5);
+  const organizerFarmerPaymentPendingTotal = roundQtl(
+    organizerFarmerPaymentPendingRows.reduce((sum, row) => sum + row.pendingAmount, 0)
+  );
   const organizerPerformanceRows: OrganizerPerformanceRow[] = Array.from(
     registrations
       .reduce((map, registration) => {
@@ -1281,12 +1465,17 @@ export default function HomePage() {
   );
   const organizerReportOptions = Array.from(
     new Set(
-      financialVouchers
-        .filter((voucher) => !reportDistrict || voucher.district === reportDistrict)
-        .map((voucher) => {
-          const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
-          return registration?.organizerName?.trim() || "Direct Farmer";
-        })
+      [
+        ...organizers
+          .filter((organizer) => !reportDistrict || organizer.district === reportDistrict)
+          .map((organizer) => organizer.name.trim()),
+        ...financialVouchers
+          .filter((voucher) => !reportDistrict || voucher.district === reportDistrict)
+          .map((voucher) => {
+            const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+            return registration?.organizerName?.trim() || "Direct Farmer";
+          })
+      ].filter(Boolean)
     )
   ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
   const organizerAssignmentRegistration =
@@ -3342,7 +3531,7 @@ export default function HomePage() {
     );
 
     const rows: (string | number)[][] = [
-      ["KRISHIV AGRI GENETICS LLP"],
+      [COMPANY_NAME],
       [adjustedStackCardPreview.title],
       [],
       ["Godown", adjustedStackCardPreview.godownName],
@@ -3416,27 +3605,30 @@ export default function HomePage() {
       unit: "mm",
       format: "a4"
     });
-
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(14);
-    pdf.text("KRISHIV AGRI GENETICS LLP", 14, 14);
-    pdf.setFontSize(11);
-    pdf.text(adjustedStackCardPreview.title, 14, 20);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    let y = renderPdfBrandHeader(pdf, adjustedStackCardPreview.title, {
+      left: 14,
+      right: pageWidth - 14,
+      y: 10,
+      compact: false,
+      logoDataUrl: pdfLogoDataUrl
+    });
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8.5);
-    pdf.text(`Godown: ${adjustedStackCardPreview.godownName}`, 14, 26);
-    pdf.text(`Stack No.: ${adjustedStackCardPreview.stackNo}`, 95, 26);
+    pdf.text(`Godown: ${adjustedStackCardPreview.godownName}`, 14, y);
+    pdf.text(`Stack No.: ${adjustedStackCardPreview.stackNo}`, 95, y);
     pdf.text(
       `Generated: ${new Date(adjustedStackCardPreview.generatedAt).toLocaleString("en-IN")}`,
       170,
-      26,
+      y,
       { align: "right" }
     );
-    pdf.text("For reference only. Does not alter main stock records.", 14, 31);
+    y += 5;
+    pdf.text("For reference only. Does not alter main stock records.", 14, y);
 
     autoTable(pdf, {
-      startY: 35,
+      startY: y + 4,
       head: [["Original Stack Position", "", "", "", "", ""]],
       body: [
         ["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags"],
@@ -3470,7 +3662,7 @@ export default function HomePage() {
 
     const originalTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
     autoTable(pdf, {
-      startY: (originalTable.lastAutoTable?.finalY ?? 35) + 5,
+      startY: (originalTable.lastAutoTable?.finalY ?? y + 4) + 5,
       head: [["S. No.", "Reg. Code", "Farmer Name", "Village", "Qty (QTL)", "Bags", "Mark"]],
       body: [
         ...adjustedStackCardPreview.adjustedRows.map((row, index) => [
@@ -3505,7 +3697,7 @@ export default function HomePage() {
 
     const finalTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
     autoTable(pdf, {
-      startY: (finalTable.lastAutoTable?.finalY ?? 35) + 5,
+      startY: (finalTable.lastAutoTable?.finalY ?? y + 4) + 5,
       head: [["Change Summary", "Value"]],
       body: [
         ["Changed Farmers", String(adjustedStackCardPreview.changedFarmerCount)],
@@ -3722,6 +3914,299 @@ export default function HomePage() {
       reportMode,
       includeDiscrepancy: reportMode !== "ACCEPTED_ONLY"
     };
+  }
+
+  function buildStackCardRegisterSections(): StackCardRegisterSection[] {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const godownFilter = reportGodownId.trim();
+    const stackFilter = reportStackNo.trim().toLowerCase();
+    const registrationFilter = reportRegistrationCode.trim().toLowerCase();
+    const farmerFilter = reportFarmerName.trim().toLowerCase();
+    const cropFilter = reportCrop.trim().toLowerCase();
+    const varietyFilter = reportVariety.trim().toLowerCase();
+    const classFilter = reportClassStage.trim().toLowerCase();
+
+    const registrationLookup = new Map(registrations.map((item) => [item.id, item] as const));
+    const godownLookup = new Map(godowns.map((item) => [item.id, item.name] as const));
+    const eligibleStackKeys = new Set<string>();
+    const stackRows = new Map<
+      string,
+      {
+        godownId: string;
+        godownName: string;
+        stackNo: string;
+        rows: Map<
+          string,
+          {
+            regCode: string;
+            farmerName: string;
+            village: string;
+            district: string;
+            qtyQtl: number;
+            bags: number;
+          }
+        >;
+      }
+    >();
+
+    for (const receipt of receipts) {
+      if (fromDate && receipt.receiptDate < fromDate) {
+        continue;
+      }
+      if (toDate && receipt.receiptDate > toDate) {
+        continue;
+      }
+      if (registrationFilter && !receipt.cropRegistrationCode.toLowerCase().includes(registrationFilter)) {
+        continue;
+      }
+      if (farmerFilter && !receipt.farmerName.toLowerCase().includes(farmerFilter)) {
+        continue;
+      }
+
+      const registration = registrationLookup.get(receipt.cropRegistrationId);
+      if (districtFilter && !(registration?.district || "").toLowerCase().includes(districtFilter)) {
+        continue;
+      }
+      if (cropFilter && !(registration?.crop || "").toLowerCase().includes(cropFilter)) {
+        continue;
+      }
+      if (varietyFilter && !(registration?.variety || "").toLowerCase().includes(varietyFilter)) {
+        continue;
+      }
+      if (classFilter && !(registration?.classStage || "").toLowerCase().includes(classFilter)) {
+        continue;
+      }
+
+      for (const line of receipt.lines) {
+        const normalizedStackNo = String(line.stackNo ?? "").trim();
+        if (!normalizedStackNo) {
+          continue;
+        }
+        if (godownFilter && line.godownId !== godownFilter) {
+          continue;
+        }
+        if (stackFilter && normalizedStackNo.toLowerCase() !== stackFilter) {
+          continue;
+        }
+
+        const key = `${line.godownId}::${normalizedStackNo}`;
+        eligibleStackKeys.add(key);
+      }
+    }
+
+    for (const receipt of receipts) {
+      if (fromDate && receipt.receiptDate < fromDate) {
+        continue;
+      }
+      if (toDate && receipt.receiptDate > toDate) {
+        continue;
+      }
+
+      const registration = registrationLookup.get(receipt.cropRegistrationId);
+      for (const line of receipt.lines) {
+        const normalizedStackNo = String(line.stackNo ?? "").trim();
+        if (!normalizedStackNo) {
+          continue;
+        }
+
+        const key = `${line.godownId}::${normalizedStackNo}`;
+        if (!eligibleStackKeys.has(key)) {
+          continue;
+        }
+
+        const group =
+          stackRows.get(key) ??
+          {
+            godownId: line.godownId,
+            godownName: godownLookup.get(line.godownId) ?? "Unknown Godown",
+            stackNo: normalizedStackNo,
+            rows: new Map()
+          };
+        stackRows.set(key, group);
+
+        const current =
+          group.rows.get(receipt.cropRegistrationCode) ??
+          {
+            regCode: receipt.cropRegistrationCode,
+            farmerName: receipt.farmerName,
+            village: registration?.village || "-",
+            district: registration?.district || "-",
+            qtyQtl: 0,
+            bags: 0
+          };
+
+        current.qtyQtl = roundQtl(current.qtyQtl + Number(line.netWeightQtl ?? line.qtyQtl ?? 0));
+        current.bags += Number(line.noOfBags ?? 0);
+        group.rows.set(receipt.cropRegistrationCode, current);
+      }
+    }
+
+    return Array.from(stackRows.values())
+      .map((group) => {
+        const originalRows = Array.from(group.rows.values()).sort((left, right) =>
+          left.regCode.localeCompare(right.regCode, "en", { numeric: true, sensitivity: "base" })
+        );
+        const sameStackAccommodations = stackAccommodations.filter(
+          (item) =>
+            item.godownId === group.godownId && String(item.stackNo ?? "").trim() === String(group.stackNo).trim()
+        );
+        const hasAdjustment = sameStackAccommodations.length > 0;
+
+        const rows = originalRows.map((row) => {
+          const adjustedInRows = sameStackAccommodations.filter((item) => item.targetRegistrationCode === row.regCode);
+          const adjustedOutRows = sameStackAccommodations.filter(
+            (item) => item.sourceRegistrationCode === row.regCode
+          );
+          const adjustedInQtyQtl = roundQtl(
+            adjustedInRows.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+          );
+          const adjustedOutQtyQtl = roundQtl(
+            adjustedOutRows.reduce((sum, item) => sum + Number(item.adjustedQtyQtl ?? 0), 0)
+          );
+          const adjustedInBags = adjustedInRows.reduce((sum, item) => sum + Number(item.adjustedBags ?? 0), 0);
+          const adjustedOutBags = adjustedOutRows.reduce((sum, item) => sum + Number(item.adjustedBags ?? 0), 0);
+          const changed =
+            adjustedInQtyQtl > 0 ||
+            adjustedOutQtyQtl > 0 ||
+            adjustedInBags > 0 ||
+            adjustedOutBags > 0;
+
+          return hasAdjustment
+            ? {
+                regCode: row.regCode,
+                farmerName: row.farmerName,
+                village: row.village,
+                district: row.district,
+                qtyQtl: roundQtl(row.qtyQtl + adjustedInQtyQtl - adjustedOutQtyQtl),
+                bags: row.bags + adjustedInBags - adjustedOutBags,
+                mark: changed ? "*" : ""
+              }
+            : {
+                regCode: row.regCode,
+                farmerName: row.farmerName,
+                village: row.village,
+                district: row.district,
+                qtyQtl: roundQtl(row.qtyQtl),
+                bags: row.bags,
+                mark: ""
+              };
+        });
+
+        return {
+          key: `${group.godownName}::${group.stackNo}`,
+          godownId: group.godownId,
+          godownName: group.godownName,
+          stackNo: group.stackNo,
+          displayMode: hasAdjustment ? "FINAL_ADJUSTED" : "ORIGINAL",
+          rows,
+          totalQtyQtl: roundQtl(rows.reduce((sum, row) => sum + Number(row.qtyQtl ?? 0), 0)),
+          totalBags: rows.reduce((sum, row) => sum + Number(row.bags ?? 0), 0),
+          changedFarmerCount: rows.filter((row) => row.mark === "*").length
+        } satisfies StackCardRegisterSection;
+      })
+      .sort((left, right) => {
+        const godownCompare = left.godownName.localeCompare(right.godownName, "en", { sensitivity: "base" });
+        if (godownCompare !== 0) {
+          return godownCompare;
+        }
+        return left.stackNo.localeCompare(right.stackNo, "en", { numeric: true, sensitivity: "base" });
+      });
+  }
+
+  function buildStackCardRegisterPreview(): ReportPreview {
+    const sections = buildStackCardRegisterSections();
+    const previewRows = sections.flatMap((section) =>
+      section.rows.map((row, index) => ({
+        Godown: section.godownName,
+        "Stack No.": section.stackNo,
+        View: section.displayMode === "FINAL_ADJUSTED" ? "Final Adjusted" : "Original",
+        "S.No.": index + 1,
+        "Reg. Code": row.regCode,
+        "Farmer Name": row.mark === "*" ? `* ${row.farmerName}` : row.farmerName,
+        "Changed (*)": row.mark,
+        Village: row.village,
+        District: row.district,
+        "Qty (QTL)": row.qtyQtl,
+        Bags: row.bags
+      }))
+    );
+
+    return {
+      reportType: "STACK_CARD_REGISTER",
+      title: "Stack Card Register",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          Godown: "",
+          "Stack No.": "",
+          View: "",
+          "S.No.": 1,
+          "Reg. Code": "",
+          "Farmer Name": "",
+          "Changed (*)": "",
+          Village: "",
+          District: "",
+          "Qty (QTL)": 0,
+          Bags: 0
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        "Total Stacks": sections.length,
+        "Adjusted Stacks": sections.filter((item) => item.displayMode === "FINAL_ADJUSTED").length,
+        "Original Stacks": sections.filter((item) => item.displayMode === "ORIGINAL").length,
+        "Changed Farmers": sections.reduce((sum, item) => sum + item.changedFarmerCount, 0),
+        "Total Qty (QTL)": formatNumber(sections.reduce((sum, item) => sum + item.totalQtyQtl, 0)),
+        "Total Bags": sections.reduce((sum, item) => sum + item.totalBags, 0),
+        "Marker Note": "* means this farmer row changed because of stack adjustment.",
+        Rule: "Non-adjusted stacks show original sequence. Adjusted stacks show final position with * mark."
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `stack-card-register-${new Date().toISOString().slice(0, 10)}.xlsx`
+    };
+  }
+
+  function buildStackCardRegisterWorkbook(sections: StackCardRegisterSection[], preview: ReportPreview) {
+    const rows: (string | number)[][] = [
+      [COMPANY_NAME],
+      [preview.title],
+      [`Generated At: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`],
+      ["Rule", "Non-adjusted stacks show original sequence. Adjusted stacks show final position with * mark."],
+      []
+    ];
+
+    sections.forEach((section, index) => {
+      rows.push([`${index + 1}. ${section.godownName} - Stack ${section.stackNo}`]);
+      rows.push([
+        "View",
+        section.displayMode === "FINAL_ADJUSTED" ? "Final Adjusted Stack Position" : "Original Stack Position"
+      ]);
+      rows.push(["S. No.", "Reg. Code", "Farmer Name", "Changed (*)", "Village", "District", "Qty (QTL)", "Bags"]);
+      rows.push(
+        ...section.rows.map((row, rowIndex) => [
+          rowIndex + 1,
+          row.regCode,
+          row.mark === "*" ? `* ${row.farmerName}` : row.farmerName,
+          row.mark,
+          row.village,
+          row.district,
+          row.qtyQtl,
+          row.bags
+        ])
+      );
+      rows.push(["", "", "", "", "", "TOTAL", section.totalQtyQtl, section.totalBags]);
+      if (section.displayMode === "FINAL_ADJUSTED") {
+        rows.push(["", "", "", "", "", "Changed Farmers", section.changedFarmerCount, "*"]);
+        rows.push(["", "", "", "", "", "Marker Note", "* means adjusted row", ""]);
+      }
+      rows.push([]);
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Stack Card Register");
+    return workbook;
   }
 
   function buildCustomDatePaymentRegisterPreview(): ReportPreview {
@@ -3952,6 +4437,342 @@ export default function HomePage() {
     };
   }
 
+  function buildOverpaidFarmerReportPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const farmerFilter = reportFarmerName.trim().toLowerCase();
+    const registrationFilter = reportRegistrationCode.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const rows = financialVouchers
+      .map((voucher) => {
+        const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+        const organizerName = registration?.organizerName?.trim() || "Direct Farmer";
+        const finalPayable = roundQtl(getVoucherFinalPayable(voucher));
+        const paidAmount = roundQtl(getVoucherTotalPaid(voucher));
+        const balanceAmount = roundQtl(getVoucherBalance(voucher));
+        return {
+          voucherNo: voucher.voucherNo,
+          voucherDate: voucher.voucherDate,
+          organizerName,
+          farmerName: voucher.farmerName,
+          regCode: voucher.cropRegistrationCode,
+          village: voucher.village || registration?.village || "-",
+          district: voucher.district || registration?.district || "-",
+          grossPayableAmount: roundQtl(Number(voucher.grossPayableAmount ?? 0)),
+          deductionAmount: roundQtl(Number(voucher.deductionAmount ?? 0)),
+          finalPayable,
+          paidAmount,
+          balanceAmount,
+          status: voucher.status || "DRAFT",
+          seasonEntry: `${voucher.season} ${voucher.year}`.trim()
+        };
+      })
+      .filter((row) => row.balanceAmount < 0 || row.status === "OVERPAID")
+      .filter((row) => !seasonLabel || row.seasonEntry.toLowerCase() === seasonLabel.toLowerCase())
+      .filter((row) => !fromDate || row.voucherDate >= fromDate)
+      .filter((row) => !toDate || row.voucherDate <= toDate)
+      .filter((row) => !districtFilter || row.district.toLowerCase() === districtFilter)
+      .filter((row) => !farmerFilter || row.farmerName.toLowerCase().includes(farmerFilter))
+      .filter((row) => !registrationFilter || row.regCode.toLowerCase().includes(registrationFilter))
+      .sort((left, right) => {
+        const balanceCompare = left.balanceAmount - right.balanceAmount;
+        if (balanceCompare !== 0) {
+          return balanceCompare;
+        }
+        return left.farmerName.localeCompare(right.farmerName, "en", { sensitivity: "base" });
+      });
+
+    const previewRows = rows.map((row, index) => ({
+      "S.No.": index + 1,
+      "Voucher No.": row.voucherNo,
+      Date: formatDateDisplay(row.voucherDate),
+      Organizer: row.organizerName,
+      "Farmer Name": row.farmerName,
+      "Reg. Code": row.regCode,
+      Village: row.village,
+      District: row.district,
+      "Gross Payable": row.grossPayableAmount,
+      Deduction: row.deductionAmount,
+      "Final Payable": row.finalPayable,
+      "Paid Amount": row.paidAmount,
+      Balance: row.balanceAmount,
+      Status: row.status
+    }));
+
+    const organizerSummary = Array.from(
+      rows.reduce((map, row) => {
+        const current = map.get(row.organizerName) ?? { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount = roundQtl(current.amount + Math.abs(row.balanceAmount));
+        map.set(row.organizerName, current);
+        return map;
+      }, new Map<string, { count: number; amount: number }>())
+    )
+      .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+      .map(([organizerName, summary]) => `${organizerName}: ${summary.count} / ${formatNumber(summary.amount)}`)
+      .join(" | ") || "-";
+
+    return {
+      reportType: "OVERPAID_FARMER_REPORT",
+      title: "Overpaid Farmer Report",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "S.No.": 1,
+          "Voucher No.": "",
+          Date: "",
+          Organizer: "",
+          "Farmer Name": "",
+          "Reg. Code": "",
+          Village: "",
+          District: "",
+          "Gross Payable": 0,
+          Deduction: 0,
+          "Final Payable": 0,
+          "Paid Amount": 0,
+          Balance: 0,
+          Status: ""
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        Season: seasonLabel,
+        "Total Overpaid Farmers": previewRows.length,
+        "Overpaid Exposure": formatNumber(rows.reduce((sum, row) => sum + Math.abs(row.balanceAmount), 0)),
+        "Most Negative Balance": formatNumber(Math.abs(Math.min(...rows.map((row) => row.balanceAmount), 0))),
+        "Organizer Summary": organizerSummary
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `overpaid-farmer-report-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
+  function buildReceiptVoucherTraceabilityPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const farmerFilter = reportFarmerName.trim().toLowerCase();
+    const registrationFilter = reportRegistrationCode.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const rows = receipts
+      .map((receipt) => {
+        const registration = registrations.find((item) => item.id === receipt.cropRegistrationId);
+        const voucher = financialVouchers.find((item) => item.cropRegistrationId === receipt.cropRegistrationId) ?? null;
+        return {
+          receiptNo: receipt.receiptNo,
+          receiptDate: receipt.receiptDate,
+          regCode: receipt.cropRegistrationCode,
+          farmerName: receipt.farmerName,
+          village: registration?.village || "-",
+          district: registration?.district || "-",
+          netIntakeQtl: roundQtl(
+            receipt.lines.reduce((sum, line) => sum + Number(line.netWeightQtl ?? line.qtyQtl ?? 0), 0)
+          ),
+          voucherNo: voucher?.voucherNo || "-",
+          voucherStatus: voucher?.status || "NOT GENERATED",
+          finalPayable: voucher ? roundQtl(getVoucherFinalPayable(voucher)) : 0,
+          paidAmount: voucher ? roundQtl(getVoucherTotalPaid(voucher)) : 0,
+          balanceAmount: voucher ? roundQtl(getVoucherBalance(voucher)) : 0,
+          seasonEntry: registration ? `${registration.season} ${registration.year}` : ""
+        };
+      })
+      .filter((row) => !seasonLabel || row.seasonEntry.toLowerCase() === seasonLabel.toLowerCase())
+      .filter((row) => !fromDate || row.receiptDate >= fromDate)
+      .filter((row) => !toDate || row.receiptDate <= toDate)
+      .filter((row) => !districtFilter || row.district.toLowerCase() === districtFilter)
+      .filter((row) => !farmerFilter || row.farmerName.toLowerCase().includes(farmerFilter))
+      .filter((row) => !registrationFilter || row.regCode.toLowerCase().includes(registrationFilter))
+      .sort((left, right) => {
+        const dateCompare = left.receiptDate.localeCompare(right.receiptDate);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        const receiptCompare = left.receiptNo.localeCompare(right.receiptNo, "en", {
+          sensitivity: "base",
+          numeric: true
+        });
+        if (receiptCompare !== 0) {
+          return receiptCompare;
+        }
+        return left.regCode.localeCompare(right.regCode, "en", { sensitivity: "base", numeric: true });
+      });
+
+    const previewRows = rows.map((row, index) => ({
+      "S.No.": index + 1,
+      "Receipt No.": row.receiptNo,
+      "Receipt Date": formatDateDisplay(row.receiptDate),
+      "Reg. Code": row.regCode,
+      "Farmer Name": row.farmerName,
+      Village: row.village,
+      District: row.district,
+      "Net Intake (QTL)": row.netIntakeQtl,
+      "Voucher No.": row.voucherNo,
+      "Voucher Status": row.voucherStatus,
+      "Final Payable": row.finalPayable,
+      "Paid Amount": row.paidAmount,
+      Balance: row.balanceAmount
+    }));
+
+    return {
+      reportType: "RECEIPT_VOUCHER_TRACEABILITY_REPORT",
+      title: "Receipt to Voucher Traceability Report",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "S.No.": 1,
+          "Receipt No.": "",
+          "Receipt Date": "",
+          "Reg. Code": "",
+          "Farmer Name": "",
+          Village: "",
+          District: "",
+          "Net Intake (QTL)": 0,
+          "Voucher No.": "",
+          "Voucher Status": "",
+          "Final Payable": 0,
+          "Paid Amount": 0,
+          Balance: 0
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        Season: seasonLabel,
+        "Total Receipts": previewRows.length,
+        "Receipts Linked to Voucher": rows.filter((row) => row.voucherNo !== "-").length,
+        "Receipts Without Voucher": rows.filter((row) => row.voucherNo === "-").length,
+        "Total Net Intake (QTL)": formatNumber(rows.reduce((sum, row) => sum + row.netIntakeQtl, 0))
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `receipt-voucher-traceability-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
+  function buildOrganizerIntakePaymentCommissionPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const organizerFilter = reportOrganizerName.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const rows = organizers
+      .filter((organizer) => !organizerFilter || organizer.name.toLowerCase() === organizerFilter)
+      .filter((organizer) => !districtFilter || organizer.district.toLowerCase() === districtFilter)
+      .map((organizer) => {
+        const linkedRegistrations = registrations.filter(
+          (item) =>
+            item.organizerId === organizer.id &&
+            `${item.season} ${item.year}`.trim().toLowerCase() === seasonLabel.toLowerCase() &&
+            (!districtFilter || item.district.toLowerCase() === districtFilter)
+        );
+        const registrationIds = new Set(linkedRegistrations.map((item) => item.id));
+        const linkedVouchers = financialVouchers.filter(
+          (item) =>
+            registrationIds.has(item.cropRegistrationId) &&
+            (!fromDate || item.voucherDate >= fromDate) &&
+            (!toDate || item.voucherDate <= toDate)
+        );
+        const organizerPaymentRows = organizerPayments.filter(
+          (item) =>
+            item.organizerId === organizer.id &&
+            (!fromDate || item.paymentDate >= fromDate) &&
+            (!toDate || item.paymentDate <= toDate)
+        );
+        const expectedYieldQtl = roundQtl(
+          linkedRegistrations.reduce((sum, item) => sum + Number(item.expectedYieldQtl ?? 0), 0)
+        );
+        const receivedQtyQtl = roundQtl(
+          linkedRegistrations.reduce((sum, item) => sum + Number(item.totalReceivedQtl ?? 0), 0)
+        );
+        const farmerNetPayable = roundQtl(
+          linkedVouchers.reduce((sum, item) => sum + getVoucherFinalPayable(item), 0)
+        );
+        const farmerPaid = roundQtl(linkedVouchers.reduce((sum, item) => sum + getVoucherTotalPaid(item), 0));
+        const farmerBalance = roundQtl(linkedVouchers.reduce((sum, item) => sum + getVoucherBalance(item), 0));
+        const commissionRatePerQtl = roundQtl(Number(organizer.commissionRatePerQtl ?? 0));
+        const grossCommission = roundQtl(receivedQtyQtl * commissionRatePerQtl);
+        const deductionAmount = roundQtl(Number(organizer.deductionAmount ?? 0));
+        const netCommissionPayable = roundQtl(grossCommission - deductionAmount);
+        const organizerPaid = roundQtl(
+          organizerPaymentRows.reduce((sum, item) => sum + Number(item.amount ?? 0), 0)
+        );
+        const organizerBalance = roundQtl(netCommissionPayable - organizerPaid);
+        return {
+          organizerName: organizer.name,
+          district: organizer.district || "-",
+          farmerCount: linkedRegistrations.length,
+          expectedYieldQtl,
+          receivedQtyQtl,
+          farmerNetPayable,
+          farmerPaid,
+          farmerBalance,
+          commissionRatePerQtl,
+          grossCommission,
+          deductionAmount,
+          netCommissionPayable,
+          organizerPaid,
+          organizerBalance
+        };
+      })
+      .filter((row) => row.farmerCount > 0)
+      .sort((left, right) => left.organizerName.localeCompare(right.organizerName, "en", { sensitivity: "base" }));
+
+    const previewRows = rows.map((row, index) => ({
+      "S.No.": index + 1,
+      Organizer: row.organizerName,
+      District: row.district,
+      Farmers: row.farmerCount,
+      "Expected Yield": row.expectedYieldQtl,
+      "Received Qty": row.receivedQtyQtl,
+      "Farmer Net Payable": row.farmerNetPayable,
+      "Farmer Paid": row.farmerPaid,
+      "Farmer Balance": row.farmerBalance,
+      "Commission Rate/QTL": row.commissionRatePerQtl,
+      "Gross Commission": row.grossCommission,
+      Deduction: row.deductionAmount,
+      "Net Commission Payable": row.netCommissionPayable,
+      "Organizer Paid": row.organizerPaid,
+      "Organizer Balance": row.organizerBalance
+    }));
+
+    return {
+      reportType: "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT",
+      title: "Organizer Intake vs Payment vs Commission",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "S.No.": 1,
+          Organizer: "",
+          District: "",
+          Farmers: 0,
+          "Expected Yield": 0,
+          "Received Qty": 0,
+          "Farmer Net Payable": 0,
+          "Farmer Paid": 0,
+          "Farmer Balance": 0,
+          "Commission Rate/QTL": 0,
+          "Gross Commission": 0,
+          Deduction: 0,
+          "Net Commission Payable": 0,
+          "Organizer Paid": 0,
+          "Organizer Balance": 0
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        Season: seasonLabel,
+        "Total Organizers": previewRows.length,
+        "Expected Yield": formatNumber(rows.reduce((sum, row) => sum + row.expectedYieldQtl, 0)),
+        "Received Qty": formatNumber(rows.reduce((sum, row) => sum + row.receivedQtyQtl, 0)),
+        "Farmer Net Payable": formatNumber(rows.reduce((sum, row) => sum + row.farmerNetPayable, 0)),
+        "Farmer Paid": formatNumber(rows.reduce((sum, row) => sum + row.farmerPaid, 0)),
+        "Gross Commission": formatNumber(rows.reduce((sum, row) => sum + row.grossCommission, 0)),
+        "Organizer Balance": formatNumber(rows.reduce((sum, row) => sum + row.organizerBalance, 0))
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `organizer-intake-payment-commission-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
   function buildLocalReportWorkbook(preview: ReportPreview) {
     const rows: (string | number)[][] = [];
     rows.push([preview.title]);
@@ -4037,6 +4858,18 @@ export default function HomePage() {
     if (reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER") {
       return buildOrganizerFarmerPaymentRegisterPreview();
     }
+    if (reportType === "OVERPAID_FARMER_REPORT") {
+      return buildOverpaidFarmerReportPreview();
+    }
+    if (reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT") {
+      return buildReceiptVoucherTraceabilityPreview();
+    }
+    if (reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT") {
+      return buildOrganizerIntakePaymentCommissionPreview();
+    }
+    if (reportType === "STACK_CARD_REGISTER") {
+      return buildStackCardRegisterPreview();
+    }
 
     const response = await fetchWithAuth(`${API_BASE}/api/seed/reports/preview`, {
       method: "POST",
@@ -4065,16 +4898,34 @@ export default function HomePage() {
 
   function downloadReportWorkbook() {
     void (async () => {
-      if (reportType === "CUSTOM_DATE_PAYMENT_REGISTER" || reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER") {
+      if (
+        reportType === "CUSTOM_DATE_PAYMENT_REGISTER" ||
+        reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER" ||
+        reportType === "OVERPAID_FARMER_REPORT" ||
+        reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT" ||
+        reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT" ||
+        reportType === "STACK_CARD_REGISTER"
+      ) {
         const preview =
           reportPreview ??
           (reportType === "CUSTOM_DATE_PAYMENT_REGISTER"
             ? buildCustomDatePaymentRegisterPreview()
-            : buildOrganizerFarmerPaymentRegisterPreview());
+            : reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER"
+              ? buildOrganizerFarmerPaymentRegisterPreview()
+              : reportType === "OVERPAID_FARMER_REPORT"
+                ? buildOverpaidFarmerReportPreview()
+                : reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT"
+                  ? buildReceiptVoucherTraceabilityPreview()
+                  : reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT"
+                    ? buildOrganizerIntakePaymentCommissionPreview()
+              : buildStackCardRegisterPreview());
         if (!reportPreview) {
           setReportPreview(preview);
         }
-        const workbook = buildLocalReportWorkbook(preview);
+        const workbook =
+          reportType === "STACK_CARD_REGISTER"
+            ? buildStackCardRegisterWorkbook(buildStackCardRegisterSections(), preview)
+            : buildLocalReportWorkbook(preview);
         XLSX.writeFile(workbook, preview.fileName || "payment-register.xlsx");
         notifyUser("Report workbook downloaded.");
         return;
@@ -4117,25 +4968,117 @@ export default function HomePage() {
         setReportPreview(preview);
       }
 
+      if (reportType === "STACK_CARD_REGISTER") {
+        const sections = buildStackCardRegisterSections();
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "mm",
+          format: "legal"
+        });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        let currentY = renderPdfBrandHeader(pdf, preview.title, {
+          left: 14,
+          right: pageWidth - 14,
+          y: 10,
+          compact: false,
+          logoDataUrl: pdfLogoDataUrl
+        });
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.text(`Generated: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`, 14, currentY);
+        currentY += 5;
+        pdf.text("Rule: Non-adjusted stacks show original sequence. Adjusted stacks show final position with * mark.", 14, currentY);
+
+        currentY += 7;
+        sections.forEach((section, index) => {
+          if (currentY > 180) {
+            pdf.addPage();
+            currentY = 18;
+          }
+
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(10);
+          pdf.text(`${index + 1}. ${section.godownName} - Stack ${section.stackNo}`, 14, currentY);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(8);
+          pdf.text(
+            `View: ${section.displayMode === "FINAL_ADJUSTED" ? "Final Adjusted Stack Position" : "Original Stack Position"}`,
+            14,
+            currentY + 5
+          );
+
+          autoTable(pdf, {
+            startY: currentY + 8,
+            head: [["S. No.", "Reg. Code", "Farmer Name", "Changed (*)", "Village", "District", "Qty (QTL)", "Bags"]],
+            body: [
+              ...section.rows.map((row, rowIndex) => [
+                String(rowIndex + 1),
+                row.regCode,
+                row.mark === "*" ? `* ${row.farmerName}` : row.farmerName,
+                row.mark,
+                row.village,
+                row.district,
+                formatNumber(row.qtyQtl),
+                String(row.bags)
+              ]),
+              ["", "", "", "", "", "TOTAL", formatNumber(section.totalQtyQtl), String(section.totalBags)]
+            ],
+            theme: "grid",
+            styles: {
+              font: "helvetica",
+              fontSize: 6.8,
+              cellPadding: 1.3,
+              overflow: "linebreak",
+              textColor: [47, 30, 18]
+            },
+            headStyles: {
+              fillColor: section.displayMode === "FINAL_ADJUSTED" ? [48, 86, 61] : [127, 75, 38],
+              fontSize: 7,
+              halign: "center"
+            },
+            bodyStyles: {
+              valign: "middle"
+            },
+            margin: { left: 14, right: 14, bottom: 10 }
+          });
+
+          const sectionTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
+          currentY = (sectionTable.lastAutoTable?.finalY ?? currentY + 8) + 6;
+          if (section.displayMode === "FINAL_ADJUSTED" && section.changedFarmerCount > 0) {
+            pdf.setFontSize(7.5);
+            pdf.text("* means this farmer row changed because of stack adjustment.", 14, currentY);
+            currentY += 5;
+          }
+        });
+
+        pdf.save((preview.fileName || "stack-card-register.xlsx").replace(/\.xlsx$/i, ".pdf"));
+        notifyUser("Report PDF downloaded.");
+        return;
+      }
+
       const pdf = new jsPDF({
         orientation: "landscape",
         unit: "mm",
         format: "legal"
       });
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(14);
-      pdf.text("KRISHIV AGRI GENETICS LLP", 14, 14);
-      pdf.setFontSize(11);
-      pdf.text(preview.title, 14, 20);
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let reportY = renderPdfBrandHeader(pdf, preview.title, {
+        left: 14,
+        right: pageWidth - 14,
+        y: 10,
+        compact: false,
+        logoDataUrl: pdfLogoDataUrl
+      });
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
-      pdf.text(`Season: ${reportSeasonLabel}`, 14, 26);
-      pdf.text(`Generated: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`, 120, 26);
+      pdf.text(`Season: ${reportSeasonLabel}`, 14, reportY);
+      pdf.text(`Generated: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`, 120, reportY);
+      reportY += 4;
 
       autoTable(pdf, {
-        startY: 30,
+        startY: reportY,
         head: [["Metric", "Value"]],
         body: Object.entries(preview.totals).map(([label, value]) => [label, String(value)]),
         theme: "grid",
@@ -4155,7 +5098,7 @@ export default function HomePage() {
 
       const metricsTable = pdf as jsPDF & { lastAutoTable?: { finalY?: number } };
       autoTable(pdf, {
-        startY: (metricsTable.lastAutoTable?.finalY ?? 30) + 4,
+        startY: (metricsTable.lastAutoTable?.finalY ?? reportY) + 4,
         head: [preview.columns],
         body: preview.rows.map((row) => preview.columns.map((column) => String(row[column] ?? ""))),
         theme: "grid",
@@ -4535,19 +5478,13 @@ export default function HomePage() {
     const metaEntries = preview.summary.slice(0, 4);
     const detailEntries = preview.summary.slice(4);
 
-    doc.setDrawColor(91, 61, 38);
-    doc.setLineWidth(0.3);
-    doc.line(left, y, right, y);
-    y += 4;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(preview.pageSize === "A5" ? 12 : 14);
-    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
-    y += 5;
-    doc.text(titleText, pageWidth / 2, y, { align: "center" });
-    y += 4;
-    doc.line(left, y, right, y);
-    y += 5;
+    y = renderPdfBrandHeader(doc, titleText, {
+      left,
+      right,
+      y,
+      compact: preview.pageSize === "A5",
+      logoDataUrl: pdfLogoDataUrl
+    });
 
     doc.setFontSize(preview.pageSize === "A5" ? 9 : 10);
     metaEntries.forEach((item, index) => {
@@ -5136,17 +6073,13 @@ export default function HomePage() {
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setDrawColor(91, 61, 38);
-    doc.line(left, y, right, y);
-    y += 4;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
-    y += 5;
-    doc.text("FARMER OVERALL INTAKE CUM PAYMENT VOUCHER", pageWidth / 2, y, { align: "center" });
-    y += 4;
-    doc.line(left, y, right, y);
-    y += 5;
+    y = renderPdfBrandHeader(doc, "FARMER OVERALL INTAKE CUM PAYMENT VOUCHER", {
+      left,
+      right,
+      y,
+      compact: true,
+      logoDataUrl: pdfLogoDataUrl
+    });
 
     const topLines = [
       ["Voucher No.", voucher.voucherNo],
@@ -5365,174 +6298,264 @@ export default function HomePage() {
     notifyUser(`${vouchers.length} voucher(s) downloaded in one PDF.`);
   }
 
-  function downloadPaymentLedgerPdf(voucher: FinancialVoucher) {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a5"
-    });
+  function renderPaymentLedgerPdfPage(doc: jsPDF, voucher: FinancialVoucher, addPage = false) {
+    if (addPage) {
+      doc.addPage("a5", "portrait");
+    }
+
     const pageWidth = doc.internal.pageSize.getWidth();
-    const left = 10;
-    const right = pageWidth - 10;
-    let y = 10;
-    const finalPayableAmount = getVoucherFinalPayable(voucher);
-    const seedPurchaseAmount = Number(voucher.grossPayableAmount ?? 0);
-    const seedPaymentAmount = Number(voucher.deductionAmount ?? 0);
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const left = 8;
+    const right = pageWidth - 8;
+    let y = 8;
+    const grossPayableAmount = roundQtl(Number(voucher.grossPayableAmount ?? 0));
+    const deductionAmount = roundQtl(Number(voucher.deductionAmount ?? 0));
+    const roundedAmount = roundQtl(Number(voucher.roundedOffAmount ?? 0));
+    const sortedPayments = (voucher.payments ?? [])
+      .slice()
+      .sort((leftPayment, rightPayment) => {
+        const dateCompare = leftPayment.paymentDate.localeCompare(rightPayment.paymentDate);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        return (leftPayment.transactionNo || "").localeCompare(rightPayment.transactionNo || "", "en", {
+          sensitivity: "base"
+        });
+      });
 
     const ledgerRows: Array<[string, string, string, string, string, string]> = [];
-    let runningBalance = finalPayableAmount;
+    let runningBalance = 0;
+
+    runningBalance = roundQtl(runningBalance + grossPayableAmount);
     ledgerRows.push([
       formatDateDisplay(voucher.voucherDate),
-      "Seed Purchase Voucher Raised",
+      "Voucher Raised",
       "-",
-      formatNumber(finalPayableAmount),
+      formatNumber(grossPayableAmount),
       "-",
       formatNumber(runningBalance)
     ]);
 
-    (voucher.payments ?? []).forEach((payment, index) => {
-      runningBalance = Number((runningBalance - Number(payment.amount ?? 0)).toFixed(2));
+    if (deductionAmount !== 0) {
+      runningBalance = roundQtl(runningBalance - deductionAmount);
+      ledgerRows.push([
+        formatDateDisplay(voucher.voucherDate),
+        "Deduction Applied",
+        "-",
+        "-",
+        formatNumber(deductionAmount),
+        formatNumber(runningBalance)
+      ]);
+    }
+
+    if (roundedAmount !== 0) {
+      const roundedTransactionType = roundedAmount > 0 ? "Rounded Off Added" : "Rounded Off Less";
+      if (roundedAmount > 0) {
+        runningBalance = roundQtl(runningBalance + roundedAmount);
+        ledgerRows.push([
+          formatDateDisplay(voucher.voucherDate),
+          roundedTransactionType,
+          "-",
+          formatNumber(roundedAmount),
+          "-",
+          formatNumber(runningBalance)
+        ]);
+      } else {
+        runningBalance = roundQtl(runningBalance - Math.abs(roundedAmount));
+        ledgerRows.push([
+          formatDateDisplay(voucher.voucherDate),
+          roundedTransactionType,
+          "-",
+          "-",
+          formatNumber(Math.abs(roundedAmount)),
+          formatNumber(runningBalance)
+        ]);
+      }
+    }
+
+    sortedPayments.forEach((payment) => {
+      const amount = roundQtl(Number(payment.amount ?? 0));
+      runningBalance = roundQtl(runningBalance - amount);
       ledgerRows.push([
         formatDateDisplay(payment.paymentDate),
-        `${index === 0 ? "Payment" : "Other Payment"} by RTGS/NEFT`,
+        payment.mode ? `Payment by ${payment.mode}` : "Payment",
         payment.transactionNo || "-",
         "-",
-        formatNumber(Number(payment.amount ?? 0)),
+        formatNumber(amount),
         formatNumber(runningBalance)
       ]);
     });
 
-    const totalCredit = roundQtl(
-      (voucher.payments ?? []).reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
-    );
-    const closingBalance = roundQtl(finalPayableAmount - totalCredit);
+    y = renderPdfBrandHeader(doc, "FARMER VOUCHER LEDGER", {
+      left,
+      right,
+      y,
+      compact: true,
+      logoDataUrl: pdfLogoDataUrl
+    });
 
-    doc.setDrawColor(91, 61, 38);
-    doc.setLineWidth(0.3);
-    doc.line(left, y, right, y);
-    y += 4;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
-    y += 5;
-    doc.text("FARMER PAYMENT LEDGER", pageWidth / 2, y, { align: "center" });
-    y += 4;
-    doc.line(left, y, right, y);
-    y += 6;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.text("Voucher No.", left, y);
-    doc.setFont("helvetica", "normal");
-    doc.text(`: ${voucher.voucherNo}`, left + 31, y);
-    y += 6;
-
-    const farmerSummary = [
+    const metaLines = [
+      ["Voucher No.", voucher.voucherNo],
+      ["Voucher Date", formatDateDisplay(voucher.voucherDate)],
+      ["Season", `${voucher.season} ${voucher.year}`],
       ["Farmer Name", voucher.farmerName],
       ["F/H Name", voucher.fatherName || "-"],
+      ["Reg. Code", voucher.cropRegistrationCode],
       ["Village", voucher.village || "-"],
+      ["Block", voucher.block || "-"],
       ["District", voucher.district || "-"]
     ];
 
-    farmerSummary.forEach(([label, value]) => {
+    doc.setFontSize(8.2);
+    metaLines.forEach(([label, value]) => {
       doc.setFont("helvetica", "bold");
       doc.text(label, left, y);
       doc.setFont("helvetica", "normal");
-      doc.text(`: ${value}`, left + 31, y);
-      y += 4.6;
+      doc.text(`: ${value}`, left + 30, y);
+      y += 4.2;
     });
+
+    const voucherRemark = String(voucher.remarks ?? "").trim();
+    if (voucherRemark) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Voucher Remark", left, y);
+      doc.text(`: ${voucherRemark}`, left + 30, y, { maxWidth: right - (left + 30) });
+      y += 5.2;
+    }
 
     y += 1;
     doc.line(left, y, right, y);
     y += 4;
     doc.setFont("helvetica", "bold");
-    doc.text("Voucher Summary", left, y);
-    y += 4;
-    doc.line(left, y, right, y);
-    y += 5;
-
-    [
-      ["Seed Purchase Amount", formatNumber(seedPurchaseAmount)],
-      ["Seed Payment", formatNumber(seedPaymentAmount)],
-      ["Final Payable Amount", formatNumber(finalPayableAmount)]
-    ].forEach(([label, value]) => {
-      doc.setFont("helvetica", "bold");
-      doc.text(label, left, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(`: ${value}`, left + 40, y);
-      y += 4.6;
-    });
-
-    y += 1;
-    doc.line(left, y, right, y);
-    y += 4;
-    doc.setFont("helvetica", "bold");
-    doc.text("Ledger Detail", left, y);
+    doc.text("Receipt / Intake Detail", left, y);
     y += 3;
 
     autoTable(doc, {
       startY: y,
-      head: [["Date", "Particulars", "Transaction No.", "Debit", "Credit", "Balance"]],
-      body: ledgerRows,
+      head: [["S.No.", "Receipt No.", "Date", "Vehicle No.", "Stack", "Bags", "Gross Qty", "Net Qty"]],
+      body: [
+        ...voucher.lines.map((line, index) => [
+          String(index + 1),
+          line.receiptNo,
+          formatDateDisplay(line.receiptDate),
+          line.vehicleNo,
+          line.stackNo,
+          String(line.bags),
+          formatNumber(line.grossQtyQtl),
+          formatNumber(line.netQtyQtl)
+        ]),
+        [
+          "",
+          "",
+          "",
+          "Total",
+          "",
+          String(voucher.totalBags),
+          formatNumber(voucher.totalGrossQtyQtl),
+          formatNumber(voucher.totalNetQtyQtl)
+        ]
+      ],
       margin: { left, right },
       styles: {
         font: "helvetica",
-        fontSize: 6.7,
-        cellPadding: 1.2,
+        fontSize: 6.2,
+        cellPadding: 1.1,
         lineColor: [160, 140, 120],
         lineWidth: 0.1
       },
       headStyles: {
         fillColor: [91, 61, 38],
         textColor: 255,
-        fontStyle: "bold",
-        halign: "left"
+        fontStyle: "bold"
       },
       columnStyles: {
-        0: { cellWidth: 18 },
-        1: { cellWidth: 36 },
-        2: { cellWidth: 28 },
-        3: { cellWidth: 18, halign: "right" },
-        4: { cellWidth: 18, halign: "right" },
-        5: { cellWidth: 18, halign: "right" }
+        0: { cellWidth: 9, halign: "center" },
+        1: { cellWidth: 16 },
+        2: { cellWidth: 16 },
+        3: { cellWidth: 36 },
+        4: { cellWidth: 10 },
+        5: { cellWidth: 10, halign: "right" },
+        6: { cellWidth: 18, halign: "right" },
+        7: { cellWidth: 18, halign: "right" }
+      },
+      didParseCell: (data) => {
+        if (data.row.index === voucher.lines.length) {
+          data.cell.styles.fontStyle = "bold";
+        }
       }
     });
 
-    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 5;
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 4;
+    if (y > pageHeight - 72) {
+      doc.addPage("a5", "portrait");
+      y = 10;
+    }
+
     doc.line(left, y, right, y);
     y += 4;
     doc.setFont("helvetica", "bold");
-    doc.text("Ledger Totals", left, y);
-    y += 4;
-    doc.line(left, y, right, y);
-    y += 5;
+    doc.text("Financial Transactions", left, y);
+    y += 3;
 
-    [
-      ["Total Debit", formatNumber(finalPayableAmount)],
-      ["Total Credit", formatNumber(totalCredit)],
-      ["Closing Balance", formatNumber(closingBalance)]
-    ].forEach(([label, value]) => {
-      doc.setFont("helvetica", "bold");
-      doc.text(label, left, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(`: ${value}`, left + 31, y);
-      y += 4.6;
+    autoTable(doc, {
+      startY: y,
+      head: [["S.No.", "Date", "Transaction Type", "Transaction No.", "Debit", "Credit", "Balance"]],
+      body: ledgerRows.map((row, index) => [String(index + 1), ...row]),
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 6.1,
+        cellPadding: 1.05,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 8, halign: "center" },
+        1: { cellWidth: 14 },
+        2: { cellWidth: 32 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 15, halign: "right" },
+        5: { cellWidth: 15, halign: "right" },
+        6: { cellWidth: 15, halign: "right" }
+      }
     });
+  }
 
-    y += 2;
-    doc.line(left, y, right, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text("Prepared By          : __________________", left, y);
-    y += 5;
-    doc.text("Checked By           : __________________", left, y);
-    y += 5;
-    doc.text("Approved By          : __________________", left, y);
-    y += 4;
-    doc.line(left, y, right, y);
+  function downloadPaymentLedgerPdf(voucher: FinancialVoucher) {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+    renderPaymentLedgerPdfPage(doc, voucher);
     doc.save(`${voucher.voucherNo.replace(/[^A-Za-z0-9_-]+/g, "_")}_ledger.pdf`);
     notifyUser(`Payment ledger for ${voucher.voucherNo} downloaded.`);
+  }
+
+  function downloadBulkPaymentLedgerPdf(vouchers: FinancialVoucher[]) {
+    if (!vouchers.length) {
+      notifyUser("No vouchers match the current filter for bulk ledger download.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+
+    vouchers.forEach((voucher, index) => {
+      renderPaymentLedgerPdfPage(doc, voucher, index > 0);
+    });
+
+    const districtLabel = voucherRegisterDistrictFilter || "ALL_DISTRICTS";
+    doc.save(`financial_ledgers_${districtLabel.replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`);
+    notifyUser(`${vouchers.length} ledger(s) downloaded in one PDF.`);
   }
 
   function downloadOrganizerCommissionVoucherPdf(summary: OrganizerCommissionRow) {
@@ -5559,19 +6582,13 @@ export default function HomePage() {
         });
       });
 
-    doc.setDrawColor(91, 61, 38);
-    doc.setLineWidth(0.3);
-    doc.line(left, y, right, y);
-    y += 5;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text("KRISHIV AGRI GENETICS LLP", pageWidth / 2, y, { align: "center" });
-    y += 6;
-    doc.text("ORGANIZER COMMISSION VOUCHER", pageWidth / 2, y, { align: "center" });
-    y += 5;
-    doc.line(left, y, right, y);
-    y += 7;
+    y = renderPdfBrandHeader(doc, "ORGANIZER COMMISSION VOUCHER", {
+      left,
+      right,
+      y,
+      compact: false,
+      logoDataUrl: pdfLogoDataUrl
+    });
 
     const summaryLines: Array<[string, string]> = [
       ["Organizer Name", summary.organizer.name],
@@ -5881,7 +6898,8 @@ export default function HomePage() {
       <main className="loginShell">
         <section className="loginCard">
           <div className="loginTitleBlock">
-            <h1>KRISHIV Seed Intake</h1>
+            <img className="loginLogo" src={BRAND_LOGO_SRC} alt="Krishiv Seeds" />
+            <h1>Seed Intake Platform</h1>
             <p>Login to continue.</p>
           </div>
 
@@ -5925,9 +6943,12 @@ export default function HomePage() {
   return (
     <main className="appShell">
       <header className="topBar">
-        <div>
-          <h1>KRISHIV Seed Intake</h1>
-          <p>{reportSeasonLabel}</p>
+        <div className="topBarBrand">
+          <img className="topBarLogo" src={BRAND_LOGO_SRC} alt="Krishiv Seeds" />
+          <div>
+            <h1>Seed Intake Platform</h1>
+            <p>{reportSeasonLabel}</p>
+          </div>
         </div>
         <div className="headerMeta">
           <span>{currentUser.name} ({currentUser.role})</span>
@@ -5949,9 +6970,9 @@ export default function HomePage() {
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebarBrand">
-            <div className="seal">KA</div>
+            <img className="sidebarLogo" src={BRAND_LOGO_SRC} alt="Krishiv Seeds" />
             <div>
-              <strong>KRISHIV AGRI GENETICS LLP</strong>
+              <strong>{COMPANY_NAME}</strong>
               <p>Raw seed intake and certification traceability</p>
             </div>
           </div>
@@ -6216,6 +7237,10 @@ export default function HomePage() {
                   <span>No-Intake Pending Qty</span>
                   <strong>{formatNumber(organizerNoIntakePendingQty)} QTL</strong>
                 </div>
+                <div className="metricBox">
+                  <span>Organizer Farmer Payment Pending</span>
+                  <strong>{formatNumber(organizerFarmerPaymentPendingTotal)} INR</strong>
+                </div>
               </section>
 
               <section className="panel twoColumn">
@@ -6263,6 +7288,7 @@ export default function HomePage() {
                     <li>{dashboardMetrics.discrepancyCount} discrepancy cases remain open across {stackHotspotRows.length} stack hotspot groups</li>
                     <li>{pendingRegistrationRows.length} major registrations still have substantial balance pending intake</li>
                     <li>{unpaidVoucherCount} vouchers are not fully settled and outstanding balance is {formatNumber(voucherBalanceOutstanding)} INR</li>
+                    <li>{organizerFarmerPaymentPendingRows.length} organizers carry {formatNumber(organizerFarmerPaymentPendingTotal)} INR farmer-payment pending in total</li>
                     <li>{organizerPendingCount} organizers still have {formatNumber(organizerBalanceTotal)} INR pending after {formatNumber(organizerDeductionTotal)} INR deduction</li>
                     <li>{organizerNoIntakeFarmerCount} organizer-linked farmers still have zero intake against {formatNumber(organizerNoIntakePendingQty)} QTL pending quantity</li>
                     <li>{dashboardMetrics.shiftedCases} discrepancy shift entries have already moved {formatNumber(dashboardMetrics.shiftedQty)} QTL</li>
@@ -6337,6 +7363,75 @@ export default function HomePage() {
                           <tr>
                             <td colSpan={9} className="emptyStateCell">
                               No organizer commission record available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <section className="dashboardBoard">
+                <article
+                  className={`panel infoCard dashboardCard ${
+                    dashboardExpandedSections.organizerFarmerPending ? "dashboardCardExpanded" : ""
+                  }`}
+                >
+                  <div className="panelHeader dashboardCardHeader">
+                    <div>
+                      <h3>Organizer-wise Farmer Payment Pending</h3>
+                      <p>Farmer payment balance pending, sorted organizer-wise for follow-up</p>
+                    </div>
+                    <div className="panelHeaderActions">
+                      <button
+                        className="smallButton"
+                        type="button"
+                        onClick={() => toggleDashboardSection("organizerFarmerPending")}
+                      >
+                        {dashboardExpandedSections.organizerFarmerPending ? "Collapse" : "View Full"}
+                      </button>
+                      <button className="smallButton" type="button" onClick={() => setActiveView("reports")}>
+                        Open Reports
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tableWrap">
+                    <table className="registrationTable compactTable">
+                      <thead>
+                        <tr>
+                          <th>Organizer</th>
+                          <th>District</th>
+                          <th>Farmers</th>
+                          <th>Vouchers</th>
+                          <th>Net Payable</th>
+                          <th>Paid</th>
+                          <th>Pending</th>
+                          <th>Overpaid</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleOrganizerFarmerPaymentPendingRows.length ? (
+                          visibleOrganizerFarmerPaymentPendingRows.map((row) => (
+                            <tr
+                              key={row.organizerId}
+                              className="clickableRow"
+                              onClick={() => setActiveView("reports")}
+                            >
+                              <td>{row.organizerName}</td>
+                              <td>{row.district || "-"}</td>
+                              <td>{row.farmerCount}</td>
+                              <td>{row.voucherCount}</td>
+                              <td>{formatNumber(row.netPayableAmount)} INR</td>
+                              <td>{formatNumber(row.paidAmount)} INR</td>
+                              <td>{formatNumber(row.pendingAmount)} INR</td>
+                              <td>{row.overpaidCount}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8} className="emptyStateCell">
+                              No organizer-wise farmer payment pending found.
                             </td>
                           </tr>
                         )}
@@ -7587,6 +8682,30 @@ export default function HomePage() {
                     Farmers without organizer linkage are shown under `Direct Farmer`.
                   </p>
                 )}
+                {isOverpaidFarmerReport && (
+                  <p className="mastersIntro">
+                    Overpaid Farmer Report highlights vouchers where deduction or payment has pushed the farmer
+                    balance below zero.
+                  </p>
+                )}
+                {isReceiptVoucherTraceabilityReport && (
+                  <p className="mastersIntro">
+                    Receipt to Voucher Traceability shows which saved receipt is linked to which farmer voucher,
+                    along with current payment position.
+                  </p>
+                )}
+                {isOrganizerIntakePaymentCommissionReport && (
+                  <p className="mastersIntro">
+                    Organizer Intake vs Payment vs Commission compares organizer-linked expected yield, deposited
+                    intake, farmer payment position, and organizer commission settlement together.
+                  </p>
+                )}
+                {isStackCardRegisterReport && (
+                  <p className="mastersIntro">
+                    Stack Card Register downloads every stack in one file. Non-adjusted stacks show original
+                    sequence, while adjusted stacks show only final adjusted position with `*` marked farmers.
+                  </p>
+                )}
                 <div className="formGrid">
                   <label>
                     <span>Report Type</span>
@@ -7598,7 +8717,11 @@ export default function HomePage() {
                       ))}
                     </select>
                   </label>
-                  {!isPaymentRegisterReport && !isOrganizerFarmerPaymentReport && (
+                  {!isPaymentRegisterReport &&
+                    !isOrganizerFarmerPaymentReport &&
+                    !isOverpaidFarmerReport &&
+                    !isReceiptVoucherTraceabilityReport &&
+                    !isOrganizerIntakePaymentCommissionReport && (
                     <label>
                       <span>Season</span>
                       <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
@@ -7614,14 +8737,18 @@ export default function HomePage() {
                   </label>
                   <label>
                     <span>District</span>
-                    {isPaymentRegisterReport || isOrganizerFarmerPaymentReport ? (
+                    {isPaymentRegisterReport ||
+                    isOrganizerFarmerPaymentReport ||
+                    isOverpaidFarmerReport ||
+                    isReceiptVoucherTraceabilityReport ||
+                    isOrganizerIntakePaymentCommissionReport ? (
                       <select
                         value={reportDistrict}
                         onChange={(event) => {
                           setReportDistrict(event.target.value);
                           setReportVillage("");
                           setReportFarmerName("");
-                          if (isOrganizerFarmerPaymentReport) {
+                          if (isOrganizerFarmerPaymentReport || isOrganizerIntakePaymentCommissionReport) {
                             setReportOrganizerName("");
                           }
                         }}
@@ -7637,7 +8764,7 @@ export default function HomePage() {
                       <input value={reportDistrict} onChange={(event) => setReportDistrict(event.target.value)} />
                     )}
                   </label>
-                  {isOrganizerFarmerPaymentReport ? (
+                  {isOrganizerFarmerPaymentReport || isOrganizerIntakePaymentCommissionReport ? (
                     <label>
                       <span>Organizer</span>
                       <select value={reportOrganizerName} onChange={(event) => setReportOrganizerName(event.target.value)}>
@@ -7652,7 +8779,7 @@ export default function HomePage() {
                   ) : (
                     <label>
                       <span>Farmer Name</span>
-                      {isPaymentRegisterReport ? (
+                      {isPaymentRegisterReport || isOverpaidFarmerReport ? (
                       <select value={reportFarmerName} onChange={(event) => setReportFarmerName(event.target.value)}>
                         <option value="">All Farmers</option>
                         {paymentRegisterFarmerOptions.map((item) => (
@@ -7697,12 +8824,24 @@ export default function HomePage() {
                         </select>
                       </label>
                     </>
-                  ) : isOrganizerFarmerPaymentReport ? (
+                  ) : isOrganizerFarmerPaymentReport ||
+                    isOverpaidFarmerReport ||
+                    isReceiptVoucherTraceabilityReport ||
+                    isOrganizerIntakePaymentCommissionReport ? (
                     <>
                       <label>
                         <span>Season</span>
                         <input value={reportSeasonLabel} onChange={(event) => setReportSeasonLabel(event.target.value)} />
                       </label>
+                      {(isOverpaidFarmerReport || isReceiptVoucherTraceabilityReport) && (
+                        <label>
+                          <span>Reg. Code</span>
+                          <input
+                            value={reportRegistrationCode}
+                            onChange={(event) => setReportRegistrationCode(event.target.value)}
+                          />
+                        </label>
+                      )}
                     </>
                   ) : (
                     <>
@@ -7948,6 +9087,13 @@ export default function HomePage() {
                     onClick={() => downloadBulkVoucherPdf(filteredVoucherRegisterRows)}
                   >
                     Bulk Download PDF
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    onClick={() => downloadBulkPaymentLedgerPdf(filteredVoucherRegisterRows)}
+                  >
+                    Bulk Ledger PDF
                   </button>
                 </div>
                 <div className="tableWrap">
@@ -9507,7 +10653,8 @@ export default function HomePage() {
                 <div className="slipClassic voucherClassic">
                   <div className="slipClassicRule" />
                   <div className="slipClassicTitle">
-                    <div>KRISHIV AGRI GENETICS LLP</div>
+                    <img className="slipClassicLogo" src={BRAND_LOGO_SRC} alt="Krishiv Seeds" />
+                    <div>{COMPANY_NAME}</div>
                     <div>FARMER OVERALL INTAKE CUM PAYMENT VOUCHER</div>
                   </div>
                   <div className="slipClassicRule" />
@@ -10283,7 +11430,8 @@ export default function HomePage() {
                   <div className="slipClassic">
                     <div className="slipClassicRule" />
                     <div className="slipClassicTitle">
-                      <div>KRISHIV AGRI GENETICS LLP</div>
+                      <img className="slipClassicLogo" src={BRAND_LOGO_SRC} alt="Krishiv Seeds" />
+                      <div>{COMPANY_NAME}</div>
                       <div>
                         {slipPreview.template === "DAILY_CONSOLIDATED_CLASSIC"
                           ? "DAILY CONSOLIDATED INTAKE SLIP"
