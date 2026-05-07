@@ -215,6 +215,7 @@ type ReportType =
   | "DAILY_INTAKE_REGISTER"
   | "CUSTOM_DATE_PAYMENT_REGISTER"
   | "ORGANIZER_FARMER_PAYMENT_REGISTER"
+  | "ORGANIZER_PAYMENT_TRANSACTION_REPORT"
   | "OVERPAID_FARMER_REPORT"
   | "RECEIPT_VOUCHER_TRACEABILITY_REPORT"
   | "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT"
@@ -235,6 +236,24 @@ type ReportPreview = {
   totals: Record<string, string | number>;
   generatedAt: string;
   fileName: string;
+};
+
+type OrganizerPaymentTransactionBlock = {
+  organizerName: string;
+  regCode: string;
+  name: string;
+  village: string;
+  district: string;
+  seasonLabel: string;
+  grossAmount: number;
+  deduction: number;
+  finalAmount: number;
+  payments: {
+    transactionDate: string;
+    payment: number;
+    transactionNumber: string;
+    transactionRemark: string;
+  }[];
 };
 
 type StackCardRegisterSection = {
@@ -364,6 +383,7 @@ const reportTypeOptions: { value: ReportType; label: string }[] = [
   { value: "DAILY_INTAKE_REGISTER", label: "Daily Intake Register" },
   { value: "CUSTOM_DATE_PAYMENT_REGISTER", label: "Custom Date Payment Register" },
   { value: "ORGANIZER_FARMER_PAYMENT_REGISTER", label: "Organizer Wise Farmer Payment" },
+  { value: "ORGANIZER_PAYMENT_TRANSACTION_REPORT", label: "Organizer Payment Transaction Report" },
   { value: "OVERPAID_FARMER_REPORT", label: "Overpaid Farmer Report" },
   { value: "RECEIPT_VOUCHER_TRACEABILITY_REPORT", label: "Receipt to Voucher Traceability" },
   { value: "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT", label: "Organizer Intake vs Payment vs Commission" },
@@ -1187,6 +1207,8 @@ export default function HomePage() {
   const todayReceiptNet = todayReceipts.reduce((sum, receipt) => sum + sumReceiptNetQty(receipt), 0);
   const isPaymentRegisterReport = reportType === "CUSTOM_DATE_PAYMENT_REGISTER";
   const isOrganizerFarmerPaymentReport = reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER";
+  const isOrganizerPaymentTransactionReport =
+    reportType === "ORGANIZER_PAYMENT_TRANSACTION_REPORT";
   const isOverpaidFarmerReport = reportType === "OVERPAID_FARMER_REPORT";
   const isReceiptVoucherTraceabilityReport = reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT";
   const isOrganizerIntakePaymentCommissionReport =
@@ -4437,6 +4459,170 @@ export default function HomePage() {
     };
   }
 
+  function buildOrganizerPaymentTransactionReportPreview(): ReportPreview {
+    const fromDate = reportFromDate.trim();
+    const toDate = reportToDate.trim();
+    const districtFilter = reportDistrict.trim().toLowerCase();
+    const organizerFilter = reportOrganizerName.trim().toLowerCase();
+    const seasonLabel = reportSeasonLabel.trim() || "RABI 2025-26";
+
+    const blocks: OrganizerPaymentTransactionBlock[] = financialVouchers
+      .map((voucher) => {
+        const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+        const organizerName = registration?.organizerName?.trim() || "Direct Farmer";
+        const voucherSeasonLabel = `${voucher.season} ${voucher.year}`.trim();
+        const payments = (voucher.payments ?? [])
+          .filter((payment) => !fromDate || payment.paymentDate >= fromDate)
+          .filter((payment) => !toDate || payment.paymentDate <= toDate)
+          .sort((left, right) => {
+            const dateCompare = left.paymentDate.localeCompare(right.paymentDate);
+            if (dateCompare !== 0) {
+              return dateCompare;
+            }
+            return (left.transactionNo || "").localeCompare(right.transactionNo || "", "en", {
+              sensitivity: "base",
+              numeric: true
+            });
+          })
+          .map((payment) => ({
+            transactionDate: payment.paymentDate,
+            payment: roundQtl(Number(payment.amount ?? 0)),
+            transactionNumber: payment.transactionNo || "-",
+            transactionRemark: payment.remarks || "-"
+          }));
+
+        return {
+          organizerName,
+          regCode: voucher.cropRegistrationCode,
+          name: voucher.farmerName,
+          village: voucher.village || registration?.village || "-",
+          district: voucher.district || registration?.district || "-",
+          seasonLabel: voucherSeasonLabel,
+          grossAmount: roundQtl(Number(voucher.grossPayableAmount ?? 0)),
+          deduction: roundQtl(Number(voucher.deductionAmount ?? 0)),
+          finalAmount: roundQtl(getVoucherFinalPayable(voucher)),
+          payments
+        };
+      })
+      .filter((block) => block.payments.length > 0)
+      .filter((block) => !seasonLabel || block.seasonLabel.toLowerCase() === seasonLabel.toLowerCase())
+      .filter((block) => !districtFilter || block.district.toLowerCase() === districtFilter)
+      .filter((block) => !organizerFilter || block.organizerName.toLowerCase() === organizerFilter)
+      .sort((left, right) => {
+        const organizerCompare = left.organizerName.localeCompare(right.organizerName, "en", {
+          sensitivity: "base"
+        });
+        if (organizerCompare !== 0) {
+          return organizerCompare;
+        }
+        const nameCompare = left.name.localeCompare(right.name, "en", { sensitivity: "base" });
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+        return left.regCode.localeCompare(right.regCode, "en", {
+          sensitivity: "base",
+          numeric: true
+        });
+      });
+
+    const previewRows = blocks.flatMap((block) => {
+      const paymentRows = block.payments.map((payment, paymentIndex) => ({
+        "reg code": paymentIndex === 0 ? block.regCode : "",
+        name: paymentIndex === 0 ? block.name : "",
+        village: paymentIndex === 0 ? block.village : "",
+        distt: paymentIndex === 0 ? block.district : "",
+        "gross amount": paymentIndex === 0 ? block.grossAmount : "",
+        deduction: paymentIndex === 0 ? block.deduction : "",
+        "final amount": paymentIndex === 0 ? block.finalAmount : "",
+        "transaction date": payment.transactionDate,
+        payment: payment.payment,
+        "transaction number": payment.transactionNumber,
+        "transaction remark": payment.transactionRemark
+      }));
+      const paidAmount = roundQtl(
+        block.payments.reduce((sum, payment) => sum + payment.payment, 0)
+      );
+      const balanceAmount = roundQtl(block.finalAmount - paidAmount);
+      return [
+        ...paymentRows,
+        {
+          "reg code": "",
+          name: "",
+          village: "",
+          distt: "",
+          "gross amount": "",
+          deduction: "",
+          "final amount": "Farmer total / balance",
+          "transaction date": "",
+          payment: paidAmount,
+          "transaction number": `Balance: ${formatNumber(balanceAmount)}`,
+          "transaction remark":
+            balanceAmount < 0 ? "OVERPAID" : balanceAmount === 0 ? "SETTLED" : "PENDING"
+        }
+      ];
+    });
+
+    const organizerSummary =
+      Array.from(
+        blocks.reduce((map, block) => {
+          const current = map.get(block.organizerName) ?? { count: 0, payment: 0 };
+          current.count += block.payments.length;
+          current.payment = roundQtl(
+            current.payment + block.payments.reduce((sum, payment) => sum + payment.payment, 0)
+          );
+          map.set(block.organizerName, current);
+          return map;
+        }, new Map<string, { count: number; payment: number }>())
+      )
+        .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+        .map(([organizerName, summary]) => `${organizerName}: ${summary.count} / ${formatNumber(summary.payment)}`)
+        .join(" | ") || "-";
+
+    const totalPayment = roundQtl(
+      blocks.reduce(
+        (sum, block) =>
+          sum + block.payments.reduce((paymentSum, payment) => paymentSum + payment.payment, 0),
+        0
+      )
+    );
+
+    return {
+      reportType: "ORGANIZER_PAYMENT_TRANSACTION_REPORT",
+      title: "Organizer Payment Transaction Report",
+      columns: Object.keys(
+        previewRows[0] ?? {
+          "reg code": "",
+          name: "",
+          village: "",
+          distt: "",
+          "gross amount": 0,
+          deduction: 0,
+          "final amount": 0,
+          "transaction date": "",
+          payment: 0,
+          "transaction number": "",
+          "transaction remark": ""
+        }
+      ),
+      rows: previewRows,
+      totals: {
+        "From Date": fromDate ? formatDateDisplay(fromDate) : "ALL",
+        "To Date": toDate ? formatDateDisplay(toDate) : "ALL",
+        Organizer: reportOrganizerName || "ALL",
+        "Total Farmers": blocks.length,
+        "Total Payment Entries": blocks.reduce((sum, block) => sum + block.payments.length, 0),
+        "Total Gross Amount": formatNumber(blocks.reduce((sum, block) => sum + block.grossAmount, 0)),
+        "Total Deduction": formatNumber(blocks.reduce((sum, block) => sum + block.deduction, 0)),
+        "Total Final Amount": formatNumber(blocks.reduce((sum, block) => sum + block.finalAmount, 0)),
+        "Total Payment": formatNumber(totalPayment),
+        "Total Balance": formatNumber(blocks.reduce((sum, block) => sum + block.finalAmount, 0) - totalPayment),
+        "Organizer Summary": organizerSummary
+      },
+      generatedAt: new Date().toISOString(),
+      fileName: `organizer-payment-transactions-${seasonLabel.replace(/\s+/g, "-").toLowerCase()}.xlsx`
+    };
+  }
+
   function buildOverpaidFarmerReportPreview(): ReportPreview {
     const fromDate = reportFromDate.trim();
     const toDate = reportToDate.trim();
@@ -4794,6 +4980,73 @@ export default function HomePage() {
     return workbook;
   }
 
+  function buildOrganizerPaymentTransactionWorkbook(preview: ReportPreview) {
+    const rows: (string | number)[][] = [];
+    rows.push([COMPANY_NAME]);
+    rows.push([preview.title]);
+    rows.push([`Generated At: ${new Date(preview.generatedAt).toLocaleString("en-IN")}`]);
+    rows.push([]);
+    rows.push(preview.columns);
+    for (const row of preview.rows) {
+      rows.push(preview.columns.map((column) => row[column] ?? ""));
+    }
+    rows.push([]);
+    rows.push(["Totals"]);
+    for (const [key, value] of Object.entries(preview.totals)) {
+      rows.push([key, value]);
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const merges: XLSX.Range[] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(preview.columns.length - 1, 0) } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: Math.max(preview.columns.length - 1, 0) } }
+    ];
+
+    let activeBlockStart = -1;
+    preview.rows.forEach((row, index) => {
+      const sheetRow = index + 5;
+      if (String(row["reg code"] ?? "").trim()) {
+        activeBlockStart = sheetRow;
+      }
+      if (row["final amount"] === "Farmer total / balance" && activeBlockStart >= 0) {
+        const lastPaymentRow = sheetRow - 1;
+        if (lastPaymentRow > activeBlockStart) {
+          for (let columnIndex = 0; columnIndex <= 6; columnIndex += 1) {
+            merges.push({
+              s: { r: activeBlockStart, c: columnIndex },
+              e: { r: lastPaymentRow, c: columnIndex }
+            });
+          }
+        }
+        activeBlockStart = -1;
+      }
+    });
+    worksheet["!merges"] = merges;
+    worksheet["!cols"] = [
+      { wch: 14 },
+      { wch: 26 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 13 },
+      { wch: 19 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 30 },
+      { wch: 28 }
+    ];
+    worksheet["!autofilter"] = {
+      ref: `A5:${XLSX.utils.encode_col(Math.max(preview.columns.length - 1, 0))}${Math.max(
+        5,
+        preview.rows.length + 5
+      )}`
+    };
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Payment Transactions");
+    return workbook;
+  }
+
   function runDatabaseBackup() {
     if (!requirePermission("canMaintenance", "Only Admin can run database backup.")) {
       return;
@@ -4858,6 +5111,9 @@ export default function HomePage() {
     if (reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER") {
       return buildOrganizerFarmerPaymentRegisterPreview();
     }
+    if (reportType === "ORGANIZER_PAYMENT_TRANSACTION_REPORT") {
+      return buildOrganizerPaymentTransactionReportPreview();
+    }
     if (reportType === "OVERPAID_FARMER_REPORT") {
       return buildOverpaidFarmerReportPreview();
     }
@@ -4901,6 +5157,7 @@ export default function HomePage() {
       if (
         reportType === "CUSTOM_DATE_PAYMENT_REGISTER" ||
         reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER" ||
+        reportType === "ORGANIZER_PAYMENT_TRANSACTION_REPORT" ||
         reportType === "OVERPAID_FARMER_REPORT" ||
         reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT" ||
         reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT" ||
@@ -4912,19 +5169,23 @@ export default function HomePage() {
             ? buildCustomDatePaymentRegisterPreview()
             : reportType === "ORGANIZER_FARMER_PAYMENT_REGISTER"
               ? buildOrganizerFarmerPaymentRegisterPreview()
-              : reportType === "OVERPAID_FARMER_REPORT"
-                ? buildOverpaidFarmerReportPreview()
-                : reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT"
-                  ? buildReceiptVoucherTraceabilityPreview()
-                  : reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT"
-                    ? buildOrganizerIntakePaymentCommissionPreview()
-              : buildStackCardRegisterPreview());
+              : reportType === "ORGANIZER_PAYMENT_TRANSACTION_REPORT"
+                ? buildOrganizerPaymentTransactionReportPreview()
+                : reportType === "OVERPAID_FARMER_REPORT"
+                  ? buildOverpaidFarmerReportPreview()
+                  : reportType === "RECEIPT_VOUCHER_TRACEABILITY_REPORT"
+                    ? buildReceiptVoucherTraceabilityPreview()
+                    : reportType === "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT"
+                      ? buildOrganizerIntakePaymentCommissionPreview()
+                      : buildStackCardRegisterPreview());
         if (!reportPreview) {
           setReportPreview(preview);
         }
         const workbook =
           reportType === "STACK_CARD_REGISTER"
             ? buildStackCardRegisterWorkbook(buildStackCardRegisterSections(), preview)
+            : reportType === "ORGANIZER_PAYMENT_TRANSACTION_REPORT"
+              ? buildOrganizerPaymentTransactionWorkbook(preview)
             : buildLocalReportWorkbook(preview);
         XLSX.writeFile(workbook, preview.fileName || "payment-register.xlsx");
         notifyUser("Report workbook downloaded.");
@@ -8682,6 +8943,12 @@ export default function HomePage() {
                     Farmers without organizer linkage are shown under `Direct Farmer`.
                   </p>
                 )}
+                {isOrganizerPaymentTransactionReport && (
+                  <p className="mastersIntro">
+                    Organizer Payment Transaction Report shows payment entries organiser-wise with reg code, farmer,
+                    village, district, gross amount, deduction, final amount, payment, transaction number, and remark.
+                  </p>
+                )}
                 {isOverpaidFarmerReport && (
                   <p className="mastersIntro">
                     Overpaid Farmer Report highlights vouchers where deduction or payment has pushed the farmer
@@ -8719,6 +8986,7 @@ export default function HomePage() {
                   </label>
                   {!isPaymentRegisterReport &&
                     !isOrganizerFarmerPaymentReport &&
+                    !isOrganizerPaymentTransactionReport &&
                     !isOverpaidFarmerReport &&
                     !isReceiptVoucherTraceabilityReport &&
                     !isOrganizerIntakePaymentCommissionReport && (
@@ -8739,6 +9007,7 @@ export default function HomePage() {
                     <span>District</span>
                     {isPaymentRegisterReport ||
                     isOrganizerFarmerPaymentReport ||
+                    isOrganizerPaymentTransactionReport ||
                     isOverpaidFarmerReport ||
                     isReceiptVoucherTraceabilityReport ||
                     isOrganizerIntakePaymentCommissionReport ? (
@@ -8748,7 +9017,11 @@ export default function HomePage() {
                           setReportDistrict(event.target.value);
                           setReportVillage("");
                           setReportFarmerName("");
-                          if (isOrganizerFarmerPaymentReport || isOrganizerIntakePaymentCommissionReport) {
+                          if (
+                            isOrganizerFarmerPaymentReport ||
+                            isOrganizerPaymentTransactionReport ||
+                            isOrganizerIntakePaymentCommissionReport
+                          ) {
                             setReportOrganizerName("");
                           }
                         }}
@@ -8764,7 +9037,9 @@ export default function HomePage() {
                       <input value={reportDistrict} onChange={(event) => setReportDistrict(event.target.value)} />
                     )}
                   </label>
-                  {isOrganizerFarmerPaymentReport || isOrganizerIntakePaymentCommissionReport ? (
+                  {isOrganizerFarmerPaymentReport ||
+                  isOrganizerPaymentTransactionReport ||
+                  isOrganizerIntakePaymentCommissionReport ? (
                     <label>
                       <span>Organizer</span>
                       <select value={reportOrganizerName} onChange={(event) => setReportOrganizerName(event.target.value)}>
@@ -8825,6 +9100,7 @@ export default function HomePage() {
                       </label>
                     </>
                   ) : isOrganizerFarmerPaymentReport ||
+                    isOrganizerPaymentTransactionReport ||
                     isOverpaidFarmerReport ||
                     isReceiptVoucherTraceabilityReport ||
                     isOrganizerIntakePaymentCommissionReport ? (
