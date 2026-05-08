@@ -246,6 +246,9 @@ type OrganizerPaymentTransactionBlock = {
   village: string;
   district: string;
   seasonLabel: string;
+  totalBags: number;
+  totalNetQtyQtl: number;
+  ratePerQtl: number;
   grossAmount: number;
   deduction: number;
   finalAmount: number;
@@ -4525,6 +4528,9 @@ export default function HomePage() {
           village: voucher.village || registration?.village || "-",
           district: voucher.district || registration?.district || "-",
           seasonLabel: voucherSeasonLabel,
+          totalBags: Number(voucher.totalBags ?? 0),
+          totalNetQtyQtl: roundQtl(Number(voucher.totalNetQtyQtl ?? 0)),
+          ratePerQtl: roundQtl(Number(voucher.certifiedRatePerQtl ?? 0)),
           grossAmount: roundQtl(Number(voucher.grossPayableAmount ?? 0)),
           deduction: roundQtl(Number(voucher.deductionAmount ?? 0)),
           finalAmount: roundQtl(getVoucherFinalPayable(voucher)),
@@ -4558,6 +4564,9 @@ export default function HomePage() {
         name: paymentIndex === 0 ? block.name : "",
         village: paymentIndex === 0 ? block.village : "",
         distt: paymentIndex === 0 ? block.district : "",
+        "total bags": paymentIndex === 0 ? block.totalBags : "",
+        "total net qty": paymentIndex === 0 ? block.totalNetQtyQtl : "",
+        rate: paymentIndex === 0 ? block.ratePerQtl : "",
         "gross amount": paymentIndex === 0 ? block.grossAmount : "",
         deduction: paymentIndex === 0 ? block.deduction : "",
         "final amount": paymentIndex === 0 ? block.finalAmount : "",
@@ -4577,6 +4586,9 @@ export default function HomePage() {
           name: "",
           village: "",
           distt: "",
+          "total bags": "",
+          "total net qty": "",
+          rate: "",
           "gross amount": "",
           deduction: "",
           "final amount": "Farmer total / balance",
@@ -4622,6 +4634,9 @@ export default function HomePage() {
           name: "",
           village: "",
           distt: "",
+          "total bags": 0,
+          "total net qty": 0,
+          rate: 0,
           "gross amount": 0,
           deduction: 0,
           "final amount": 0,
@@ -4638,6 +4653,8 @@ export default function HomePage() {
         Organizer: reportOrganizerName || "ALL",
         "Total Farmers": blocks.length,
         "Total Payment Entries": blocks.reduce((sum, block) => sum + block.payments.length, 0),
+        "Total Bags": blocks.reduce((sum, block) => sum + block.totalBags, 0),
+        "Total Net Qty": formatNumber(blocks.reduce((sum, block) => sum + block.totalNetQtyQtl, 0)),
         "Total Gross Amount": formatNumber(blocks.reduce((sum, block) => sum + block.grossAmount, 0)),
         "Total Deduction": formatNumber(blocks.reduce((sum, block) => sum + block.deduction, 0)),
         "Total Final Amount": formatNumber(blocks.reduce((sum, block) => sum + block.finalAmount, 0)),
@@ -5038,7 +5055,7 @@ export default function HomePage() {
       if (row["final amount"] === "Farmer total / balance" && activeBlockStart >= 0) {
         const lastPaymentRow = sheetRow - 1;
         if (lastPaymentRow > activeBlockStart) {
-          for (let columnIndex = 0; columnIndex <= 6; columnIndex += 1) {
+          for (let columnIndex = 0; columnIndex <= 9; columnIndex += 1) {
             merges.push({
               s: { r: activeBlockStart, c: columnIndex },
               e: { r: lastPaymentRow, c: columnIndex }
@@ -5053,6 +5070,9 @@ export default function HomePage() {
       { wch: 14 },
       { wch: 26 },
       { wch: 20 },
+      { wch: 12 },
+      { wch: 11 },
+      { wch: 14 },
       { wch: 12 },
       { wch: 15 },
       { wch: 13 },
@@ -6593,9 +6613,9 @@ export default function HomePage() {
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const left = 8;
-    const right = pageWidth - 8;
-    let y = 8;
+    const left = 6;
+    const right = pageWidth - 6;
+    let y = 5;
     const grossPayableAmount = roundQtl(Number(voucher.grossPayableAmount ?? 0));
     const deductionAmount = roundQtl(Number(voucher.deductionAmount ?? 0));
     const roundedAmount = roundQtl(Number(voucher.roundedOffAmount ?? 0));
@@ -6694,29 +6714,33 @@ export default function HomePage() {
       ["District", voucher.district || "-"]
     ];
 
-    doc.setFontSize(8.2);
-    metaLines.forEach(([label, value]) => {
+    doc.setFontSize(6.6);
+    metaLines.forEach(([label, value], index) => {
+      const x = index % 2 === 0 ? left : left + 70;
+      const rowY = y + Math.floor(index / 2) * 3.6;
       doc.setFont("helvetica", "bold");
-      doc.text(label, left, y);
+      doc.text(label, x, rowY);
       doc.setFont("helvetica", "normal");
-      doc.text(`: ${value}`, left + 30, y);
-      y += 4.2;
+      doc.text(`: ${value}`, x + 22, rowY, { maxWidth: 42 });
     });
+    y += Math.ceil(metaLines.length / 2) * 3.6 + 1.5;
 
     const voucherRemark = String(voucher.remarks ?? "").trim();
     if (voucherRemark) {
+      doc.setFontSize(6.5);
       doc.setFont("helvetica", "bold");
       doc.text("Voucher Remark", left, y);
-      doc.text(`: ${voucherRemark}`, left + 30, y, { maxWidth: right - (left + 30) });
-      y += 5.2;
+      doc.text(`: ${voucherRemark}`, left + 24, y, { maxWidth: right - (left + 24) });
+      y += 3.8;
     }
 
-    y += 1;
+    y += 0.6;
     doc.line(left, y, right, y);
-    y += 4;
-    doc.setFont("helvetica", "bold");
-    doc.text("Receipt / Intake Detail", left, y);
     y += 3;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("Receipt / Intake Detail", left, y);
+    y += 2;
 
     autoTable(doc, {
       startY: y,
@@ -6746,54 +6770,8 @@ export default function HomePage() {
       margin: { left, right },
       styles: {
         font: "helvetica",
-        fontSize: 6.2,
-        cellPadding: 1.1,
-        lineColor: [160, 140, 120],
-        lineWidth: 0.1
-      },
-      headStyles: {
-        fillColor: [91, 61, 38],
-        textColor: 255,
-        fontStyle: "bold"
-      },
-      columnStyles: {
-        0: { cellWidth: 9, halign: "center" },
-        1: { cellWidth: 16 },
-        2: { cellWidth: 16 },
-        3: { cellWidth: 36 },
-        4: { cellWidth: 10 },
-        5: { cellWidth: 10, halign: "right" },
-        6: { cellWidth: 18, halign: "right" },
-        7: { cellWidth: 18, halign: "right" }
-      },
-      didParseCell: (data) => {
-        if (data.row.index === voucher.lines.length) {
-          data.cell.styles.fontStyle = "bold";
-        }
-      }
-    });
-
-    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 4;
-    if (y > pageHeight - 72) {
-      doc.addPage("a5", "portrait");
-      y = 10;
-    }
-
-    doc.line(left, y, right, y);
-    y += 4;
-    doc.setFont("helvetica", "bold");
-    doc.text("Financial Transactions", left, y);
-    y += 3;
-
-    autoTable(doc, {
-      startY: y,
-      head: [["S.No.", "Date", "Transaction Type", "Transaction No.", "Debit", "Credit", "Balance"]],
-      body: ledgerRows.map((row, index) => [String(index + 1), ...row]),
-      margin: { left, right },
-      styles: {
-        font: "helvetica",
-        fontSize: 6.1,
-        cellPadding: 1.05,
+        fontSize: 4.8,
+        cellPadding: 0.55,
         lineColor: [160, 140, 120],
         lineWidth: 0.1
       },
@@ -6804,9 +6782,116 @@ export default function HomePage() {
       },
       columnStyles: {
         0: { cellWidth: 8, halign: "center" },
-        1: { cellWidth: 14 },
-        2: { cellWidth: 32 },
-        3: { cellWidth: 25 },
+        1: { cellWidth: 15 },
+        2: { cellWidth: 14 },
+        3: { cellWidth: 34 },
+        4: { cellWidth: 9 },
+        5: { cellWidth: 9, halign: "right" },
+        6: { cellWidth: 17, halign: "right" },
+        7: { cellWidth: 17, halign: "right" }
+      },
+      didParseCell: (data) => {
+        if (data.row.index === voucher.lines.length) {
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+    });
+
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 2.5;
+    if (y > pageHeight - 34) {
+      doc.addPage("a5", "portrait");
+      y = 6;
+    }
+
+    doc.line(left, y, right, y);
+    y += 3;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("Payment Calculation", left, y);
+    y += 2;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Particulars", "Qty (QTL)", "Rate/QTL", "Amount"]],
+      body: [
+        [
+          "Certified Seed",
+          formatNumber(voucher.certifiedQtyQtl),
+          formatNumber(voucher.certifiedRatePerQtl),
+          formatNumber(voucher.certifiedAmount)
+        ],
+        [
+          "Discrepancy Seed",
+          formatNumber(voucher.discrepancyQtyQtl),
+          formatNumber(voucher.discrepancyRatePerQtl),
+          formatNumber(voucher.discrepancyAmount)
+        ],
+        ["Gross Payable", "", "", formatNumber(grossPayableAmount)],
+      ],
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 4.9,
+        cellPadding: 0.55,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 47 },
+        1: { cellWidth: 22, halign: "right" },
+        2: { cellWidth: 22, halign: "right" },
+        3: { cellWidth: 36, halign: "right" }
+      },
+      didParseCell: (data) => {
+        if (data.row.index >= 2) {
+          data.cell.styles.fontStyle = data.row.index === 2 ? "bold" : "normal";
+        }
+        if (data.row.index === 2) {
+          data.cell.styles.fillColor = [244, 238, 229];
+        }
+      }
+    });
+
+    y = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y) + 2.5;
+    if (y > pageHeight - 34) {
+      doc.addPage("a5", "portrait");
+      y = 6;
+    }
+
+    doc.line(left, y, right, y);
+    y += 3;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("Financial Transactions", left, y);
+    y += 2;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["S.No.", "Date", "Transaction Type", "Transaction No.", "Debit", "Credit", "Balance"]],
+      body: ledgerRows.map((row, index) => [String(index + 1), ...row]),
+      margin: { left, right },
+      styles: {
+        font: "helvetica",
+        fontSize: 4.8,
+        cellPadding: 0.55,
+        lineColor: [160, 140, 120],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [91, 61, 38],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 7, halign: "center" },
+        1: { cellWidth: 13 },
+        2: { cellWidth: 31 },
+        3: { cellWidth: 29 },
         4: { cellWidth: 15, halign: "right" },
         5: { cellWidth: 15, halign: "right" },
         6: { cellWidth: 15, halign: "right" }
