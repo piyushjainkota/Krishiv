@@ -1321,6 +1321,13 @@ export default function HomePage() {
   const organizerGrossCommission = roundQtl(
     organizerCommissionRows.reduce((sum, row) => sum + row.grossCommissionAmount, 0)
   );
+  const farmerGrossPayableTotal = roundQtl(
+    financialVouchers.reduce((sum, voucher) => sum + Number(voucher.grossPayableAmount ?? 0), 0)
+  );
+  const averagePurchaseRate =
+    dashboardMetrics.netReceived > 0
+      ? roundQtl((farmerGrossPayableTotal + organizerGrossCommission) / dashboardMetrics.netReceived)
+      : 0;
   const organizerDeductionTotal = roundQtl(
     organizerCommissionRows.reduce((sum, row) => sum + row.deductionAmount, 0)
   );
@@ -7565,6 +7572,13 @@ export default function HomePage() {
                 <div className="metricBox">
                   <span>Total Net Weight</span>
                   <strong>{formatNumber(dashboardMetrics.netReceived)} QTL</strong>
+                </div>
+                <div className="metricBox">
+                  <span>Average Purchase Rate</span>
+                  <strong>{formatNumber(averagePurchaseRate)} INR/QTL</strong>
+                  <small>
+                    Gross farmer payable + organizer commission / net intake qty
+                  </small>
                 </div>
                 <div className="metricBox">
                   <span>Pending Balance</span>
