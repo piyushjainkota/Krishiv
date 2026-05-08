@@ -110,6 +110,7 @@ type OrganizerFarmerPaymentPendingRow = {
   netPayableAmount: number;
   paidAmount: number;
   pendingAmount: number;
+  paymentCompletionPct: number;
   overpaidCount: number;
 };
 
@@ -734,6 +735,8 @@ export default function HomePage() {
   const [voucherGenerationDistrictFilter, setVoucherGenerationDistrictFilter] = useState("");
   const [voucherRegisterSearch, setVoucherRegisterSearch] = useState("");
   const [voucherRegisterDistrictFilter, setVoucherRegisterDistrictFilter] = useState("");
+  const [voucherRegisterStatusFilter, setVoucherRegisterStatusFilter] = useState("");
+  const [voucherRegisterOrganizerFilter, setVoucherRegisterOrganizerFilter] = useState("");
   const [voucherRegistrationId, setVoucherRegistrationId] = useState("");
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().slice(0, 10));
@@ -1381,7 +1384,7 @@ export default function HomePage() {
       current.voucherCount += 1;
       current.netPayableAmount = roundQtl(current.netPayableAmount + getVoucherFinalPayable(voucher));
       current.paidAmount = roundQtl(current.paidAmount + getVoucherTotalPaid(voucher));
-      current.pendingAmount = roundQtl(current.pendingAmount + Math.max(getVoucherBalance(voucher), 0));
+      current.pendingAmount = roundQtl(current.pendingAmount + getVoucherBalance(voucher));
       if (getVoucherBalance(voucher) < 0 || voucher.status === "OVERPAID") {
         current.overpaidCount += 1;
       }
@@ -1404,17 +1407,22 @@ export default function HomePage() {
     >())
       .values()
   )
-    .map((row) => ({
-      organizerId: row.organizerId,
-      organizerName: row.organizerName,
-      district: row.district,
-      farmerCount: row.farmerCodes.size,
-      voucherCount: row.voucherCount,
-      netPayableAmount: roundQtl(row.netPayableAmount),
-      paidAmount: roundQtl(row.paidAmount),
-      pendingAmount: roundQtl(row.pendingAmount),
-      overpaidCount: row.overpaidCount
-    }))
+    .map((row) => {
+      const netPayableAmount = roundQtl(row.netPayableAmount);
+      const paidAmount = roundQtl(row.paidAmount);
+      return {
+        organizerId: row.organizerId,
+        organizerName: row.organizerName,
+        district: row.district,
+        farmerCount: row.farmerCodes.size,
+        voucherCount: row.voucherCount,
+        netPayableAmount,
+        paidAmount,
+        pendingAmount: roundQtl(netPayableAmount - paidAmount),
+        paymentCompletionPct: netPayableAmount > 0 ? roundQtl((paidAmount / netPayableAmount) * 100) : 0,
+        overpaidCount: row.overpaidCount
+      };
+    })
     .sort((left, right) => {
       if (right.pendingAmount !== left.pendingAmount) {
         return right.pendingAmount - left.pendingAmount;
@@ -1426,6 +1434,12 @@ export default function HomePage() {
     : organizerFarmerPaymentPendingRows.slice(0, 5);
   const organizerFarmerPaymentPendingTotal = roundQtl(
     organizerFarmerPaymentPendingRows.reduce((sum, row) => sum + row.pendingAmount, 0)
+  );
+  const organizerFarmerPaymentPaidTotal = roundQtl(
+    organizerFarmerPaymentPendingRows.reduce((sum, row) => sum + row.paidAmount, 0)
+  );
+  const organizerFarmerPaymentNetTotal = roundQtl(
+    organizerFarmerPaymentPendingRows.reduce((sum, row) => sum + row.netPayableAmount, 0)
   );
   const organizerPerformanceRows: OrganizerPerformanceRow[] = Array.from(
     registrations
@@ -1939,6 +1953,16 @@ export default function HomePage() {
   const voucherDistrictOptions = Array.from(
     new Set(registrations.map((item) => item.district).filter(Boolean))
   ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const voucherRegisterStatusOptions = Array.from(
+    new Set(financialVouchers.map((item) => String(item.status ?? "").trim()).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const getVoucherOrganizerName = (voucher: FinancialVoucher) => {
+    const registration = registrations.find((item) => item.id === voucher.cropRegistrationId);
+    return String(registration?.organizerName ?? "").trim() || "Direct Farmer";
+  };
+  const voucherRegisterOrganizerOptions = Array.from(
+    new Set(financialVouchers.map((item) => getVoucherOrganizerName(item)).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
   const filteredVoucherRegisterRows = financialVouchers
     .filter((voucher) => {
       const query = voucherRegisterSearch.trim().toLowerCase();
@@ -1951,7 +1975,10 @@ export default function HomePage() {
         voucher.district.toLowerCase().includes(query);
       const matchesDistrict =
         !voucherRegisterDistrictFilter || voucher.district === voucherRegisterDistrictFilter;
-      return matchesSearch && matchesDistrict;
+      const matchesStatus = !voucherRegisterStatusFilter || voucher.status === voucherRegisterStatusFilter;
+      const matchesOrganizer =
+        !voucherRegisterOrganizerFilter || getVoucherOrganizerName(voucher) === voucherRegisterOrganizerFilter;
+      return matchesSearch && matchesDistrict && matchesStatus && matchesOrganizer;
     })
     .slice()
     .sort((left, right) =>
@@ -6819,6 +6846,34 @@ export default function HomePage() {
     notifyUser(`${vouchers.length} ledger(s) downloaded in one PDF.`);
   }
 
+  function downloadOrganizerWiseBulkPaymentLedgerPdf(vouchers: FinancialVoucher[]) {
+    if (!voucherRegisterOrganizerFilter) {
+      notifyUser("Select an organizer first for organizer-wise bulk ledger PDF.");
+      return;
+    }
+    const organizerVouchers = vouchers.filter(
+      (voucher) => getVoucherOrganizerName(voucher) === voucherRegisterOrganizerFilter
+    );
+    if (!organizerVouchers.length) {
+      notifyUser("No vouchers match this organizer and current filters.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a5"
+    });
+
+    organizerVouchers.forEach((voucher, index) => {
+      renderPaymentLedgerPdfPage(doc, voucher, index > 0);
+    });
+
+    const organizerLabel = voucherRegisterOrganizerFilter.replace(/[^A-Za-z0-9_-]+/g, "_");
+    doc.save(`financial_ledgers_organizer_${organizerLabel}.pdf`);
+    notifyUser(`${organizerVouchers.length} organizer-wise ledger(s) downloaded in one PDF.`);
+  }
+
   function downloadOrganizerCommissionVoucherPdf(summary: OrganizerCommissionRow) {
     const doc = new jsPDF({
       orientation: "portrait",
@@ -7501,6 +7556,10 @@ export default function HomePage() {
                 <div className="metricBox">
                   <span>Organizer Farmer Payment Pending</span>
                   <strong>{formatNumber(organizerFarmerPaymentPendingTotal)} INR</strong>
+                  <small>
+                    Net {formatNumber(organizerFarmerPaymentNetTotal)} - Paid{" "}
+                    {formatNumber(organizerFarmerPaymentPaidTotal)}
+                  </small>
                 </div>
               </section>
 
@@ -7549,7 +7608,7 @@ export default function HomePage() {
                     <li>{dashboardMetrics.discrepancyCount} discrepancy cases remain open across {stackHotspotRows.length} stack hotspot groups</li>
                     <li>{pendingRegistrationRows.length} major registrations still have substantial balance pending intake</li>
                     <li>{unpaidVoucherCount} vouchers are not fully settled and outstanding balance is {formatNumber(voucherBalanceOutstanding)} INR</li>
-                    <li>{organizerFarmerPaymentPendingRows.length} organizers carry {formatNumber(organizerFarmerPaymentPendingTotal)} INR farmer-payment pending in total</li>
+                    <li>{organizerFarmerPaymentPendingRows.length} organizers carry {formatNumber(organizerFarmerPaymentPendingTotal)} INR net farmer-payment balance after overpaid adjustment</li>
                     <li>{organizerPendingCount} organizers still have {formatNumber(organizerBalanceTotal)} INR pending after {formatNumber(organizerDeductionTotal)} INR deduction</li>
                     <li>{organizerNoIntakeFarmerCount} organizer-linked farmers still have zero intake against {formatNumber(organizerNoIntakePendingQty)} QTL pending quantity</li>
                     <li>{dashboardMetrics.shiftedCases} discrepancy shift entries have already moved {formatNumber(dashboardMetrics.shiftedQty)} QTL</li>
@@ -7642,7 +7701,7 @@ export default function HomePage() {
                   <div className="panelHeader dashboardCardHeader">
                     <div>
                       <h3>Organizer-wise Farmer Payment Pending</h3>
-                      <p>Farmer payment balance pending, sorted organizer-wise for follow-up</p>
+                      <p>Net farmer-payment balance after paid and overpaid adjustment</p>
                     </div>
                     <div className="panelHeaderActions">
                       <button
@@ -7667,7 +7726,8 @@ export default function HomePage() {
                           <th>Vouchers</th>
                           <th>Net Payable</th>
                           <th>Paid</th>
-                          <th>Pending</th>
+                          <th>Net Pending</th>
+                          <th>Payment Done</th>
                           <th>Overpaid</th>
                         </tr>
                       </thead>
@@ -7686,12 +7746,34 @@ export default function HomePage() {
                               <td>{formatNumber(row.netPayableAmount)} INR</td>
                               <td>{formatNumber(row.paidAmount)} INR</td>
                               <td>{formatNumber(row.pendingAmount)} INR</td>
+                              <td>
+                                <div className="dashboardStatusCell">
+                                  <div className="dashboardStatusBar">
+                                    <div
+                                      className={`dashboardStatusFill ${
+                                        row.paymentCompletionPct >= 100
+                                          ? "dashboardStatusFillHigh"
+                                          : row.paymentCompletionPct >= 60
+                                            ? "dashboardStatusFillMedium"
+                                            : "dashboardStatusFillLow"
+                                      }`}
+                                      style={{
+                                        width: `${Math.max(Math.min(row.paymentCompletionPct, 100), 0)}%`
+                                      }}
+                                    />
+                                  </div>
+                                  <small>
+                                    {formatNumber(row.paymentCompletionPct)}% paid
+                                    {row.pendingAmount < 0 ? " / overpaid" : ""}
+                                  </small>
+                                </div>
+                              </td>
                               <td>{row.overpaidCount}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8} className="emptyStateCell">
+                            <td colSpan={9} className="emptyStateCell">
                               No organizer-wise farmer payment pending found.
                             </td>
                           </tr>
@@ -9357,6 +9439,28 @@ export default function HomePage() {
                       </option>
                     ))}
                   </select>
+                  <select
+                    value={voucherRegisterStatusFilter}
+                    onChange={(event) => setVoucherRegisterStatusFilter(event.target.value)}
+                  >
+                    <option value="">All Status</option>
+                    {voucherRegisterStatusOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={voucherRegisterOrganizerFilter}
+                    onChange={(event) => setVoucherRegisterOrganizerFilter(event.target.value)}
+                  >
+                    <option value="">All Organizers</option>
+                    {voucherRegisterOrganizerOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     className="secondaryButton"
                     type="button"
@@ -9370,6 +9474,13 @@ export default function HomePage() {
                     onClick={() => downloadBulkPaymentLedgerPdf(filteredVoucherRegisterRows)}
                   >
                     Bulk Ledger PDF
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    onClick={() => downloadOrganizerWiseBulkPaymentLedgerPdf(filteredVoucherRegisterRows)}
+                  >
+                    Organizer-wise Ledger PDF
                   </button>
                 </div>
                 <div className="tableWrap">
