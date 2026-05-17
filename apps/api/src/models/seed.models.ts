@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
-const registrationStatusValues = ["ACTIVE", "BLOCKED", "CLOSED", "EXHAUSTED"] as const;
+const registrationStatusValues = ["ACTIVE", "BLOCKED", "CLOSED", "EXHAUSTED", "REJECTED"] as const;
 const lotStatusValues = ["OPEN", "FULL", "VOID", "CANCELLED"] as const;
 const discrepancyStatusValues = ["OPEN", "SHIFT_PENDING", "RESOLVED"] as const;
 

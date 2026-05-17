@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "KRISHIV Seed Intake Platform",
-  description: "Certification-safe raw seed intake and traceability platform"
+  title: "Krishiv Agri Genetics LLP | Krishiv Seeds",
+  description:
+    "Krishiv Seeds supplies quality wheat, soyabean, paddy, chana, moong, and mustard seeds from Kota, Rajasthan."
 };
 
 export default function RootLayout({

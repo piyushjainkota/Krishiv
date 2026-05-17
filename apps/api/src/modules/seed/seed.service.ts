@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, access, stat } from "node:fs/promises";
+import { mkdir, access, stat, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import type {
   AddOrganizerPaymentInput,
@@ -86,6 +87,24 @@ const execFileAsync = promisify(execFile);
 
 type AppRole = "ADMIN" | "MANAGER" | "USER";
 type ActorUser = { email: string; role: AppRole };
+
+function isBcryptHash(value: string) {
+  return /^\$2[aby]\$\d{2}\$/.test(value);
+}
+
+async function hashPassword(password: string) {
+  return bcrypt.hash(password, 12);
+}
+
+async function verifyPassword(password: string, storedPassword: string) {
+  if (!storedPassword) {
+    return false;
+  }
+  if (isBcryptHash(storedPassword)) {
+    return bcrypt.compare(password, storedPassword);
+  }
+  return storedPassword === password;
+}
 
 const permissionMatrix: Record<
   AppRole,
@@ -196,8 +215,14 @@ function resolveMongoTool(toolName: "mongodump" | "mongorestore") {
   if (configuredBin) {
     return path.join(configuredBin, process.platform === "win32" ? `${toolName}.exe` : toolName);
   }
+  const pathEntries = String(process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean);
   const knownBinPaths = [
-    "C:\\Users\\piyus\\Downloads\\mongodb-database-tools-windows-x86_64-100.16.0\\mongodb-database-tools-windows-x86_64-100.16.0\\bin"
+    ...pathEntries,
+    "/usr/local/bin",
+    "/usr/bin",
+    path.resolve(process.cwd(), "bin")
   ];
   for (const binPath of knownBinPaths) {
     const candidate = path.join(
@@ -209,6 +234,19 @@ function resolveMongoTool(toolName: "mongodump" | "mongorestore") {
     }
   }
   return process.platform === "win32" ? `${toolName}.exe` : toolName;
+}
+
+function safeBackupRoot() {
+  return path.resolve(config.backupRoot);
+}
+
+function assertSafeBackupPath(inputPath: string) {
+  const resolved = path.resolve(inputPath.trim());
+  const root = safeBackupRoot();
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`Backup path must be inside ${root}.`);
+  }
+  return resolved;
 }
 
 function deriveRegistrationStatus(params: {
@@ -238,14 +276,14 @@ function deriveVoucherStatus(finalPayableAmount: number, totalPaidAmount: number
   if (finalPayableAmount < 0) {
     return "OVERPAID";
   }
-  if (totalPaidAmount <= 0) {
-    return "DRAFT";
-  }
   if (totalPaidAmount > finalPayableAmount) {
     return "OVERPAID";
   }
   if (totalPaidAmount === finalPayableAmount) {
     return "PAID";
+  }
+  if (totalPaidAmount <= 0) {
+    return "DRAFT";
   }
   return "PART PAID";
 }
@@ -309,6 +347,8 @@ type ReportType =
   | "DAILY_INTAKE_REGISTER"
   | "REGISTRATION_PENDING_RECEIVED"
   | "LOT_WISE_STOCK_LEDGER"
+  | "ADJUSTED_LOT_FORMATION_REGISTER"
+  | "ADJUSTED_LOT_LEDGER_FARMER_WISE"
   | "STACK_WISE_STOCK_POSITION"
   | "STACK_CARD_REGISTER"
   | "DISCREPANCY_REGISTER";
@@ -487,6 +527,7 @@ export class SeedService {
     }
 
     for (const user of defaultUsers) {
+      const passwordHash = await hashPassword(user.passwordHash);
       await UserModel.updateOne(
         { email: user.email },
         {
@@ -494,7 +535,7 @@ export class SeedService {
             name: user.name,
             email: user.email,
             role: user.role,
-            passwordHash: user.passwordHash,
+            passwordHash,
             isActive: true
           }
         },
@@ -672,7 +713,7 @@ export class SeedService {
     }
 
     const adminUser = await this.findActiveUser("admin", "ADMIN");
-    if (!adminUser || String(adminUser.passwordHash ?? "") !== password) {
+    if (!adminUser || !(await verifyPassword(password, String(adminUser.passwordHash ?? "")))) {
       throw new Error("Admin password is invalid.");
     }
   }
@@ -785,8 +826,15 @@ export class SeedService {
   async loginUser(input: LoginInput) {
     await this.ensureCompatibility();
     const user = await this.findActiveUser(input.email);
-    if (!user || String(user.passwordHash ?? "") !== input.password) {
+    const storedPassword = String(user?.passwordHash ?? "");
+    if (!user || !(await verifyPassword(input.password, storedPassword))) {
       throw new Error("Invalid login credentials.");
+    }
+    if (!isBcryptHash(storedPassword)) {
+      await UserModel.updateOne(
+        { email: user.email },
+        { $set: { passwordHash: await hashPassword(input.password) } }
+      );
     }
 
     return {
@@ -799,22 +847,94 @@ export class SeedService {
     };
   }
 
+  private async createNativeJsonBackup(backupDirectory: string) {
+    const db = mongoose.connection.db;
+    if (!db) {
+      throw new Error("Database connection is not ready for backup.");
+    }
+    const EJSON = (mongoose.mongo.BSON as unknown as { EJSON: {
+      stringify(value: unknown, replacer?: unknown, space?: number): string;
+    } }).EJSON;
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections
+      .map((collection) => collection.name)
+      .filter((name) => !name.startsWith("system."));
+
+    for (const collectionName of collectionNames) {
+      const documents = await db.collection(collectionName).find({}).toArray();
+      await writeFile(
+        path.join(backupDirectory, `${collectionName}.ejson`),
+        EJSON.stringify(documents, undefined, 2),
+        "utf8"
+      );
+    }
+
+    await writeFile(
+      path.join(backupDirectory, "manifest.json"),
+      JSON.stringify(
+        {
+          format: "KRISHIV_EJSON_BACKUP_V1",
+          createdAt: new Date().toISOString(),
+          collections: collectionNames
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+  }
+
+  private async restoreNativeJsonBackup(restoreDirectory: string) {
+    const manifestPath = path.join(restoreDirectory, "manifest.json");
+    await access(manifestPath);
+    const db = mongoose.connection.db;
+    if (!db) {
+      throw new Error("Database connection is not ready for restore.");
+    }
+    const EJSON = (mongoose.mongo.BSON as unknown as { EJSON: {
+      parse(value: string): unknown;
+    } }).EJSON;
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      format?: string;
+      collections?: string[];
+    };
+    if (manifest.format !== "KRISHIV_EJSON_BACKUP_V1" || !Array.isArray(manifest.collections)) {
+      throw new Error("Restore folder is not a supported Krishiv JSON backup.");
+    }
+
+    for (const collectionName of manifest.collections) {
+      if (!collectionName || collectionName.startsWith("system.") || collectionName.includes("..")) {
+        throw new Error("Restore manifest contains an invalid collection name.");
+      }
+      const filePath = path.join(restoreDirectory, `${collectionName}.ejson`);
+      const parsed = EJSON.parse(await readFile(filePath, "utf8"));
+      if (!Array.isArray(parsed)) {
+        throw new Error(`Backup collection ${collectionName} is invalid.`);
+      }
+      const collection = db.collection(collectionName);
+      await collection.deleteMany({});
+      if (parsed.length > 0) {
+        await collection.insertMany(parsed as Record<string, unknown>[]);
+      }
+    }
+  }
+
   async backupDatabase(input: BackupDatabaseInput) {
     await this.ensureCompatibility();
-    const rootDirectory = path.resolve(input.backupDirectory.trim());
+    const rootDirectory = assertSafeBackupPath(input.backupDirectory);
     await mkdir(rootDirectory, { recursive: true });
     const backupDirectory = path.join(rootDirectory, `krishiv_seed_backup_${timestampForFolder()}`);
     await mkdir(backupDirectory, { recursive: true });
 
+    let backupMode = "MONGODUMP";
     try {
       await execFileAsync(resolveMongoTool("mongodump"), [
         `--uri=${config.mongodbUri}`,
         `--out=${backupDirectory}`
       ]);
     } catch (error) {
-      throw new Error(
-        `Database backup failed. Ensure MongoDB Database Tools are installed and mongodump is available. ${error instanceof Error ? error.message : ""}`.trim()
-      );
+      backupMode = "KRISHIV_EJSON_BACKUP_V1";
+      await this.createNativeJsonBackup(backupDirectory);
     }
 
     await AuditLogModel.create({
@@ -822,7 +942,8 @@ export class SeedService {
       entityId: backupDirectory,
       action: "CREATED",
       payload: {
-        backupDirectory
+        backupDirectory,
+        backupMode
       }
     });
 
@@ -834,7 +955,7 @@ export class SeedService {
 
   async restoreDatabase(input: RestoreDatabaseInput) {
     await this.ensureCompatibility();
-    const providedDirectory = path.resolve(input.restoreDirectory.trim());
+    const providedDirectory = assertSafeBackupPath(input.restoreDirectory);
     await access(providedDirectory);
     const providedStats = await stat(providedDirectory);
     if (!providedStats.isDirectory()) {
@@ -847,6 +968,7 @@ export class SeedService {
       restoreDirectory = path.dirname(providedDirectory);
     }
 
+    let restoreMode = "MONGORESTORE";
     try {
       await execFileAsync(resolveMongoTool("mongorestore"), [
         `--uri=${config.mongodbUri}`,
@@ -854,9 +976,8 @@ export class SeedService {
         `--dir=${restoreDirectory}`
       ]);
     } catch (error) {
-      throw new Error(
-        `Database restore failed. Ensure MongoDB Database Tools are installed and the restore folder is correct. ${error instanceof Error ? error.message : ""}`.trim()
-      );
+      restoreMode = "KRISHIV_EJSON_BACKUP_V1";
+      await this.restoreNativeJsonBackup(restoreDirectory);
     }
 
     this.compatibilityReady = false;
@@ -868,7 +989,8 @@ export class SeedService {
       entityId: restoreDirectory,
       action: "RESTORED",
       payload: {
-        restoreDirectory
+        restoreDirectory,
+        restoreMode
       }
     });
 
@@ -1091,9 +1213,18 @@ export class SeedService {
   }
 
   async createGodown(input: CreateGodownInput) {
+    await this.ensureCompatibility();
+    const normalizedName = input.name.trim();
+    const duplicate = await GodownModel.findOne({
+      name: buildCaseInsensitiveExactRegex(normalizedName)
+    }).lean();
+    if (duplicate) {
+      throw new Error(`Godown ${normalizedName} already exists.`);
+    }
+
     const godown = await GodownModel.create({
       id: randomUUID(),
-      name: input.name.trim()
+      name: normalizedName
     });
 
     await AuditLogModel.create({
@@ -1107,13 +1238,18 @@ export class SeedService {
   }
 
   async createStack(input: CreateStackInput) {
+    await this.ensureCompatibility();
     const normalizedStackNo = input.stackNo.trim();
+    const godown = await GodownModel.findOne({ id: input.godownId }).lean();
+    if (!godown) {
+      throw new Error("Godown not found.");
+    }
     const existing = await StackModel.findOne({
       godownId: input.godownId,
-      stackNo: normalizedStackNo
+      stackNo: buildCaseInsensitiveExactRegex(normalizedStackNo)
     }).lean();
     if (existing) {
-      return existing;
+      throw new Error(`Stack ${normalizedStackNo} already exists in this godown.`);
     }
 
     const stack = await StackModel.create({
@@ -1130,6 +1266,53 @@ export class SeedService {
     });
 
     return stack.toObject();
+  }
+
+  async deleteGodown(godownId: string) {
+    await this.ensureCompatibility();
+    const godown = await GodownModel.findOne({ id: godownId }).lean();
+    if (!godown) {
+      throw new Error("Godown not found.");
+    }
+    const [stackCount, lotCount, receiptCount] = await Promise.all([
+      StackModel.countDocuments({ godownId }),
+      LotModel.countDocuments({ godownId }),
+      ReceiptModel.countDocuments({ "lines.godownId": godownId })
+    ]);
+    if (stackCount > 0 || lotCount > 0 || receiptCount > 0) {
+      throw new Error("Godown cannot be deleted because it is used in stacks, lots, or receipts.");
+    }
+    await GodownModel.deleteOne({ id: godownId });
+    await AuditLogModel.create({
+      entityType: "GODOWN",
+      entityId: godownId,
+      action: "DELETED",
+      payload: godown
+    });
+    return this.bootstrap();
+  }
+
+  async deleteStack(stackId: string) {
+    await this.ensureCompatibility();
+    const stack = await StackModel.findOne({ id: stackId }).lean();
+    if (!stack) {
+      throw new Error("Stack not found.");
+    }
+    const [lotCount, receiptCount] = await Promise.all([
+      LotModel.countDocuments({ stackId }),
+      ReceiptModel.countDocuments({ "lines.stackId": stackId })
+    ]);
+    if (lotCount > 0 || receiptCount > 0) {
+      throw new Error("Stack cannot be deleted because it is used in lots or receipts.");
+    }
+    await StackModel.deleteOne({ id: stackId });
+    await AuditLogModel.create({
+      entityType: "STACK",
+      entityId: stackId,
+      action: "DELETED",
+      payload: stack
+    });
+    return this.bootstrap();
   }
 
   async createOrganizer(input: CreateOrganizerInput) {
@@ -3792,6 +3975,48 @@ export class SeedService {
         },
         generatedAt,
         fileName: formatReportFileName(season, "lot-wise-stock-ledger")
+      };
+    }
+
+    if (reportType === "ADJUSTED_LOT_FORMATION_REGISTER" || reportType === "ADJUSTED_LOT_LEDGER_FARMER_WISE") {
+      const previewRows = rows.flatMap((row, index) =>
+        row.lotCodes.map((lotCode) => ({
+          "Sr No.": index + 1,
+          "Reg No.": row.cropRegistrationCode,
+          "Farmer Name": row.farmerName,
+          ...(reportType === "ADJUSTED_LOT_LEDGER_FARMER_WISE" ? { "Lot ID": lotCode } : {}),
+          "Warehouse Name": row.godownName,
+          "Stack Number": row.stackNo,
+          Bags: row.noOfBags,
+          "Net Weight (QTL)": row.netWeightQtl,
+          ...(reportType === "ADJUSTED_LOT_FORMATION_REGISTER" ? { "Lot ID": lotCode } : {}),
+          "Moisture %": row.moisturePercent
+        }))
+      );
+
+      return {
+        reportType,
+        title:
+          reportType === "ADJUSTED_LOT_LEDGER_FARMER_WISE"
+            ? "Adjusted Lot Ledger Farmer Wise"
+            : "Adjusted Lot Formation Register",
+        columns: Object.keys(previewRows[0] ?? { "Sr No.": 1 }),
+        rows: previewRows,
+        totals: {
+          "Total Rows": previewRows.length,
+          "Total Bags": previewRows.reduce((sum, row) => sum + Number(row.Bags ?? 0), 0),
+          "Total Net Weight (QTL)": roundQtl(
+            previewRows.reduce((sum, row) => sum + Number(row["Net Weight (QTL)"] ?? 0), 0)
+          ),
+          "Note": "Use the platform report for adjustment-aware Excel/PDF merges."
+        },
+        generatedAt,
+        fileName: formatReportFileName(
+          season,
+          reportType === "ADJUSTED_LOT_LEDGER_FARMER_WISE"
+            ? "adjusted-lot-ledger-farmer-wise"
+            : "adjusted-lot-formation"
+        )
       };
     }
 

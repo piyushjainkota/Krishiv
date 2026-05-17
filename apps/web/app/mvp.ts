@@ -1,4 +1,4 @@
-export type RegistrationStatus = "ACTIVE" | "BLOCKED" | "CLOSED" | "EXHAUSTED";
+export type RegistrationStatus = "ACTIVE" | "BLOCKED" | "CLOSED" | "EXHAUSTED" | "REJECTED";
 export type QualityStatus = "ACCEPTED" | "HOLD";
 export type DiscrepancyStatus = "OPEN" | "SHIFT_PENDING" | "RESOLVED";
 export type AppRole = "ADMIN" | "MANAGER" | "USER";
@@ -275,7 +275,7 @@ export function calculateWeightPerBagKg(netWeightQtl: number, noOfBags: number):
 
 function textBetween(source: string, prefix: string): string {
   const line = source
-    .split("\n")
+    .split(/\r?\n/)
     .map((item) => item.trim())
     .find((item) => item.startsWith(prefix));
 
@@ -326,7 +326,15 @@ export function parseRegistrationWorkbook(rows: unknown[][]): RegistrationRecord
     const certifiedAreaHa = Number(row[8] ?? 0);
     const expectedYieldQtl = Number(row[9] ?? 0);
     const initialReceivedQtl = Number(row[10] ?? 0);
-    const allowedIntakeQtl = roundQtl(Math.min(expectedYieldQtl, expectedYieldQtl));
+    const allowedIntakeCandidate = Number(row[11] ?? expectedYieldQtl);
+    const allowedIntakeQtl = roundQtl(
+      Math.min(
+        expectedYieldQtl,
+        Number.isFinite(allowedIntakeCandidate) && allowedIntakeCandidate > 0
+          ? allowedIntakeCandidate
+          : expectedYieldQtl
+      )
+    );
     const totalReceivedQtl = roundQtl(initialReceivedQtl);
     const balanceQtl = roundQtl(Math.max(allowedIntakeQtl - totalReceivedQtl, 0));
 

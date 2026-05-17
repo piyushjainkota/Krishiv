@@ -1,5 +1,50 @@
 import { z } from "zod";
 
+const MAX_MONEY_AMOUNT = 100_000_000;
+const MAX_RATE_PER_QTL = 100_000;
+
+function stripHtml(value: string) {
+  return value.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+const safeText = z.string().transform(stripHtml);
+const optionalSafeText = z.string().optional().default("").transform(stripHtml);
+const moneyAmount = z.number().min(0).max(MAX_MONEY_AMOUNT);
+const positiveMoneyAmount = z.number().positive().max(MAX_MONEY_AMOUNT);
+const ratePerQtl = z.number().min(0).max(MAX_RATE_PER_QTL);
+
+function isValidIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function isNotFutureIsoDate(value: string) {
+  if (!isValidIsoDate(value)) {
+    return false;
+  }
+  const today = new Date();
+  const todayKey = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0")
+  ].join("-");
+  return value <= todayKey;
+}
+
+const isoDate = z.string().trim().refine(isValidIsoDate, "Date must be in YYYY-MM-DD format.");
+const notFutureIsoDate = z
+  .string()
+  .trim()
+  .refine(isNotFutureIsoDate, "Date must be valid and cannot be in the future.");
+
 export const registrationSchema = z.object({
   id: z.string(),
   season: z.string(),
@@ -25,7 +70,7 @@ export const registrationSchema = z.object({
   organizerId: z.string().optional().default(""),
   organizerName: z.string().optional().default(""),
   organizerCommissionRatePerQtl: z.number().optional().default(0),
-  status: z.enum(["ACTIVE", "BLOCKED", "CLOSED", "EXHAUSTED"]),
+  status: z.enum(["ACTIVE", "BLOCKED", "CLOSED", "EXHAUSTED", "REJECTED"]),
   sourceRowNumber: z.number()
 });
 
@@ -37,21 +82,21 @@ export const importRegistrationsSchema = z.object({
 });
 
 export const createGodownSchema = z.object({
-  name: z.string().min(1)
+  name: safeText.pipe(z.string().min(1))
 });
 
 export const createStackSchema = z.object({
   godownId: z.string().min(1),
-  stackNo: z.string().min(1)
+  stackNo: safeText.pipe(z.string().min(1))
 });
 
 export const createOrganizerSchema = z.object({
-  name: z.string().trim().min(1),
-  mobile: z.string().trim().optional().default(""),
-  village: z.string().trim().optional().default(""),
-  district: z.string().trim().optional().default(""),
-  commissionRatePerQtl: z.number().nonnegative(),
-  deductionAmount: z.number().nonnegative().optional().default(0),
+  name: safeText.pipe(z.string().min(1)),
+  mobile: optionalSafeText,
+  village: optionalSafeText,
+  district: optionalSafeText,
+  commissionRatePerQtl: ratePerQtl,
+  deductionAmount: moneyAmount.optional().default(0),
   isActive: z.boolean().optional().default(true)
 });
 
@@ -69,14 +114,14 @@ export const receiptLineSchema = z.object({
   noOfBags: z.number().nonnegative(),
   weightPerBagKg: z.number().nonnegative(),
   netWeightQtl: z.number().nonnegative(),
-  moisturePercent: z.number().nonnegative(),
-  vehicleNo: z.string().min(1),
-  remarks: z.string().optional().default("")
+  moisturePercent: z.number().min(0).max(100),
+  vehicleNo: safeText.pipe(z.string().min(1)),
+  remarks: optionalSafeText
 });
 
 export const createReceiptSchema = z.object({
   receiptNo: z.string().optional(),
-  receiptDate: z.string().min(1),
+  receiptDate: notFutureIsoDate,
   cropRegistrationId: z.string().min(1),
   lines: z.array(receiptLineSchema).min(1)
 });
@@ -88,12 +133,12 @@ export const updateReceiptSchema = createReceiptSchema.extend({
 export const createDiscrepancyShiftSchema = z.object({
   discrepancyId: z.string().min(1),
   toGodownId: z.string().min(1),
-  toStackNo: z.string().min(1),
+  toStackNo: safeText.pipe(z.string().min(1)),
   shiftedQtyQtl: z.number().positive(),
   shiftedBags: z.number().int().positive(),
-  shiftDate: z.string().min(1),
-  approvedBy: z.string().optional().default(""),
-  remarks: z.string().optional().default("")
+  shiftDate: notFutureIsoDate,
+  approvedBy: optionalSafeText,
+  remarks: optionalSafeText
 });
 
 export const createStackAccommodationSchema = z.object({
@@ -101,8 +146,8 @@ export const createStackAccommodationSchema = z.object({
   targetRegistrationId: z.string().min(1),
   adjustedQtyQtl: z.number().positive(),
   adjustedBags: z.number().int().nonnegative().optional().default(0),
-  adjustmentDate: z.string().min(1),
-  remarks: z.string().optional().default("")
+  adjustmentDate: notFutureIsoDate,
+  remarks: optionalSafeText
 });
 
 export const updateStackAccommodationSchema = createStackAccommodationSchema.extend({
@@ -114,12 +159,12 @@ export const stackAccommodationActionSchema = z.object({
 });
 
 export const createFinancialVoucherSchema = z.object({
-  voucherDate: z.string().min(1),
+  voucherDate: notFutureIsoDate,
   cropRegistrationId: z.string().min(1),
-  certifiedRatePerQtl: z.number().nonnegative(),
-  discrepancyRatePerQtl: z.number().nonnegative().default(0),
-  deductionAmount: z.number().nonnegative().default(0),
-  remarks: z.string().optional().default("")
+  certifiedRatePerQtl: ratePerQtl,
+  discrepancyRatePerQtl: ratePerQtl.default(0),
+  deductionAmount: moneyAmount.default(0),
+  remarks: optionalSafeText
 });
 
 export const updateFinancialVoucherSchema = createFinancialVoucherSchema.extend({
@@ -131,10 +176,10 @@ export const financialVoucherActionSchema = z.object({
 });
 
 export const addFinancialVoucherPaymentSchema = z.object({
-  paymentDate: z.string().min(1),
-  amount: z.number().nonnegative(),
-  transactionNo: z.string().trim().min(1),
-  remarks: z.string().optional().default("")
+  paymentDate: notFutureIsoDate,
+  amount: positiveMoneyAmount,
+  transactionNo: safeText.pipe(z.string().min(1)),
+  remarks: optionalSafeText
 });
 
 export const updateFinancialVoucherPaymentSchema = addFinancialVoucherPaymentSchema.extend({
@@ -143,17 +188,17 @@ export const updateFinancialVoucherPaymentSchema = addFinancialVoucherPaymentSch
 
 export const addOrganizerPaymentSchema = z.object({
   organizerId: z.string().trim().min(1),
-  paymentDate: z.string().min(1),
-  amount: z.number().positive(),
-  transactionNo: z.string().trim().min(1),
-  remarks: z.string().optional().default("")
+  paymentDate: notFutureIsoDate,
+  amount: positiveMoneyAmount,
+  transactionNo: safeText.pipe(z.string().min(1)),
+  remarks: optionalSafeText
 });
 
 export const updateOrganizerPaymentSchema = z.object({
-  paymentDate: z.string().min(1),
-  amount: z.number().positive(),
-  transactionNo: z.string().trim().min(1),
-  remarks: z.string().optional().default("")
+  paymentDate: notFutureIsoDate,
+  amount: positiveMoneyAmount,
+  transactionNo: safeText.pipe(z.string().min(1)),
+  remarks: optionalSafeText
 });
 
 export const loginSchema = z.object({
@@ -177,15 +222,23 @@ export const reportFilterSchema = z.object({
     "OVERALL_INTAKE",
     "SUMMARY",
     "DAILY_INTAKE_REGISTER",
+    "CUSTOM_DATE_PAYMENT_REGISTER",
+    "ORGANIZER_FARMER_PAYMENT_REGISTER",
+    "ORGANIZER_PAYMENT_TRANSACTION_REPORT",
+    "OVERPAID_FARMER_REPORT",
+    "RECEIPT_VOUCHER_TRACEABILITY_REPORT",
+    "ORGANIZER_INTAKE_PAYMENT_COMMISSION_REPORT",
     "REGISTRATION_PENDING_RECEIVED",
     "LOT_WISE_STOCK_LEDGER",
+    "ADJUSTED_LOT_FORMATION_REGISTER",
+    "ADJUSTED_LOT_LEDGER_FARMER_WISE",
     "STACK_WISE_STOCK_POSITION",
     "STACK_CARD_REGISTER",
     "DISCREPANCY_REGISTER"
   ]),
   season: z.string().optional().default(""),
-  fromDate: z.string().optional().default(""),
-  toDate: z.string().optional().default(""),
+  fromDate: z.union([isoDate, z.literal("")]).optional().default(""),
+  toDate: z.union([isoDate, z.literal("")]).optional().default(""),
   crop: z.string().optional().default(""),
   variety: z.string().optional().default(""),
   classStage: z.string().optional().default(""),

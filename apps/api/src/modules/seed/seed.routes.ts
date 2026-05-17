@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { config } from "../../config";
 import {
   addOrganizerPaymentSchema,
   addFinancialVoucherPaymentSchema,
@@ -35,25 +36,40 @@ async function requireRoles(
   reply: FastifyReply,
   allowedRoles: AppRole[]
 ) {
-  const email = String(request.headers["x-user-email"] ?? "");
-  const role = String(request.headers["x-user-role"] ?? "");
   try {
-    return await seedService.authorizeUser(email, role, allowedRoles);
+    const token = await request.jwtVerify<{ email: string; role: AppRole }>();
+    return await seedService.authorizeUser(token.email, token.role, allowedRoles);
   } catch (error) {
-    return reply.status(403).send({
-      message: error instanceof Error ? error.message : "Access denied."
+    const message = error instanceof Error ? error.message : "Login required.";
+    return reply.status(message.includes("permission") ? 403 : 401).send({
+      message: error instanceof Error ? error.message : "Login required."
     });
   }
 }
 
 export async function registerSeedRoutes(app: FastifyInstance) {
-  app.post("/api/auth/login", async (request, reply) => {
+  app.post("/api/auth/login", {
+    config: {
+      rateLimit: {
+        max: config.loginRateLimitMax,
+        timeWindow: "1 minute"
+      }
+    }
+  }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send(parsed.error.flatten());
     }
     try {
-      return await seedService.loginUser(parsed.data);
+      const login = await seedService.loginUser(parsed.data);
+      const token = app.jwt.sign(
+        { email: login.user.email, role: login.user.role },
+        { expiresIn: "12h" }
+      );
+      return {
+        ...login,
+        token
+      };
     } catch (error) {
       return reply.status(401).send({
         message: error instanceof Error ? error.message : "Invalid login."
@@ -109,6 +125,15 @@ export async function registerSeedRoutes(app: FastifyInstance) {
     return seedService.createGodown(parsed.data);
   });
 
+  app.delete("/api/seed/masters/godowns/:godownId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const godownId = String((request.params as { godownId: string }).godownId);
+    return seedService.deleteGodown(godownId);
+  });
+
   app.post("/api/seed/masters/stacks", async (request, reply) => {
     const denied = await requireRoles(request, reply, ["ADMIN"]);
     if ((denied as { statusCode?: number } | undefined)?.statusCode) {
@@ -119,6 +144,15 @@ export async function registerSeedRoutes(app: FastifyInstance) {
       return reply.status(400).send(parsed.error.flatten());
     }
     return seedService.createStack(parsed.data);
+  });
+
+  app.delete("/api/seed/masters/stacks/:stackId", async (request, reply) => {
+    const denied = await requireRoles(request, reply, ["ADMIN"]);
+    if ((denied as { statusCode?: number } | undefined)?.statusCode) {
+      return denied;
+    }
+    const stackId = String((request.params as { stackId: string }).stackId);
+    return seedService.deleteStack(stackId);
   });
 
   app.post("/api/seed/masters/organizers", async (request, reply) => {

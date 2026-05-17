@@ -36,12 +36,13 @@ function assertRegistrationEligible(
   }
 }
 
-function getNextLotNo(openLots: OpenLotSnapshot[]): number {
-  if (openLots.length === 0) {
+function getNextLotNo(openLots: OpenLotSnapshot[], cropRegistrationId: string): number {
+  const registrationLots = openLots.filter((lot) => lot.cropRegistrationId === cropRegistrationId);
+  if (registrationLots.length === 0) {
     return 1;
   }
 
-  return Math.max(...openLots.map((lot) => lot.lotNo)) + 1;
+  return Math.max(...registrationLots.map((lot) => lot.lotNo)) + 1;
 }
 
 function buildLotCode(seasonCode: string, regCode: string, lotNo: number): string {
@@ -78,7 +79,7 @@ export function planLotAllocation(params: {
 
   const plans: LotAllocationPlanLine[] = [];
   let remainingQty = roundQtl(intakeLine.qtyQtl);
-  let nextLotNo = getNextLotNo(openLots);
+  let nextLotNo = getNextLotNo(openLots, registration.id);
   let usedCompatibleLot = false;
 
   for (const lot of compatibleLots) {

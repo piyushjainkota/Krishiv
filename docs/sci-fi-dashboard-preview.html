@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KRISHIV Sci-Fi Dashboard Preview</title>
+  <style>
+    :root {
+      --bg: #050914;
+      --bg-2: #071223;
+      --panel: rgba(9, 22, 42, 0.84);
+      --panel-strong: rgba(11, 31, 58, 0.94);
+      --line: rgba(114, 238, 255, 0.24);
+      --line-strong: rgba(114, 238, 255, 0.52);
+      --cyan: #72eeff;
+      --cyan-soft: rgba(114, 238, 255, 0.14);
+      --lime: #b8ff6a;
+      --amber: #ffc857;
+      --red: #ff5d73;
+      --violet: #9e7bff;
+      --text: #eefaff;
+      --muted: #91a7bc;
+      --shadow: 0 26px 70px rgba(0, 0, 0, 0.38);
+      --mono: "Segoe UI Mono", "Consolas", "SFMono-Regular", monospace;
+      --sans: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: var(--sans);
+      background:
+        radial-gradient(circle at 12% 14%, rgba(114, 238, 255, 0.18), transparent 28%),
+        radial-gradient(circle at 88% 7%, rgba(158, 123, 255, 0.18), transparent 26%),
+        radial-gradient(circle at 50% 92%, rgba(184, 255, 106, 0.12), transparent 30%),
+        linear-gradient(135deg, #030611, var(--bg) 44%, #081327);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(114, 238, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(114, 238, 255, 0.045) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), transparent 86%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(114, 238, 255, 0.025) 50%,
+        transparent 100%
+      );
+      background-size: 100% 8px;
+      mix-blend-mode: screen;
+      opacity: 0.32;
+    }
+
+    .shell {
+      width: min(1800px, calc(100% - 36px));
+      margin: 18px auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(8, 24, 48, 0.9), rgba(4, 10, 23, 0.82));
+      box-shadow: var(--shadow), inset 0 0 36px rgba(114, 238, 255, 0.06);
+      clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+      padding: 18px 22px;
+    }
+
+    .brand {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .seal {
+      width: 62px;
+      height: 62px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      background:
+        radial-gradient(circle, rgba(114, 238, 255, 0.22), transparent 58%),
+        rgba(7, 20, 36, 0.9);
+      box-shadow: 0 0 30px rgba(114, 238, 255, 0.16);
+      font-family: var(--mono);
+      font-weight: 800;
+      letter-spacing: 0.12em;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--cyan);
+      font: 700 0.78rem/1 var(--mono);
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 6px;
+      font-size: clamp(1.5rem, 2.5vw, 2.7rem);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(114, 238, 255, 0.26);
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .session-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(150px, 1fr));
+      gap: 10px;
+      min-width: 520px;
+    }
+
+    .session-card {
+      border: 1px solid var(--line);
+      background: rgba(114, 238, 255, 0.07);
+      padding: 12px 14px;
+    }
+
+    .session-card span,
+    .stat span,
+    .panel-subtitle,
+    th,
+    .tiny {
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .session-card strong {
+      display: block;
+      margin-top: 5px;
+      font-family: var(--mono);
+      color: var(--text);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .sidebar,
+    .panel,
+    .command-card,
+    .metric {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow), inset 0 0 28px rgba(114, 238, 255, 0.04);
+      backdrop-filter: blur(16px);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 18px;
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .nav-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font: 800 0.78rem/1 var(--mono);
+      letter-spacing: 0.18em;
+      color: var(--cyan);
+      text-transform: uppercase;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav button {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid transparent;
+      border-left: 3px solid transparent;
+      padding: 12px 12px;
+      text-align: left;
+      font: 700 0.84rem/1.1 var(--sans);
+      cursor: pointer;
+    }
+
+    .nav button.active,
+    .nav button:hover {
+      border-color: rgba(114, 238, 255, 0.25);
+      border-left-color: var(--cyan);
+      background: linear-gradient(90deg, rgba(114, 238, 255, 0.14), transparent);
+    }
+
+    .main {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) 330px;
+      gap: 18px;
+    }
+
+    .command-card {
+      position: relative;
+      overflow: hidden;
+      padding: 22px;
+      min-height: 260px;
+    }
+
+    .command-card::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      background:
+        radial-gradient(circle at 75% 20%, rgba(114, 238, 255, 0.18), transparent 28%),
+        linear-gradient(110deg, transparent, rgba(184, 255, 106, 0.08), transparent);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero h2 {
+      margin-bottom: 10px;
+      font-size: clamp(1.6rem, 3vw, 3.1rem);
+      line-height: 1.02;
+      text-transform: uppercase;
+    }
+
+    .hero p {
+      color: var(--muted);
+      max-width: 720px;
+      line-height: 1.55;
+    }
+
+    .mission-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .metric {
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric::after {
+      content: "";
+      position: absolute;
+      inset: auto 14px 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.64;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font: 900 1.45rem/1 var(--mono);
+    }
+
+    .metric small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+
+    .orbital {
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      padding: 16px;
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .orbital::before,
+    .orbital::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(114, 238, 255, 0.24);
+      border-radius: 50%;
+      animation: rotate 18s linear infinite;
+    }
+
+    .orbital::before {
+      width: 220px;
+      height: 220px;
+    }
+
+    .orbital::after {
+      width: 150px;
+      height: 150px;
+      animation-direction: reverse;
+      border-color: rgba(184, 255, 106, 0.28);
+    }
+
+    .core {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      z-index: 1;
+      border: 1px solid var(--line-strong);
+      background:
+        radial-gradient(circle at 36% 32%, #eefaff, var(--cyan) 22%, #0a3853 62%, #06111f);
+      box-shadow: 0 0 46px rgba(114, 238, 255, 0.42);
+      color: #03101d;
+      font: 900 1.2rem/1 var(--mono);
+    }
+
+    @keyframes rotate {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .panel {
+      padding: 18px;
+      min-width: 0;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 16px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-header h3 {
+      margin-bottom: 5px;
+      font-size: 1.06rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      color: var(--cyan);
+      border: 1px solid var(--line);
+      background: var(--cyan-soft);
+      padding: 8px 10px;
+      font: 800 0.72rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      padding: 14px;
+      border: 1px solid rgba(114, 238, 255, 0.18);
+      background: rgba(4, 12, 24, 0.62);
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 8px;
+      font: 900 1.35rem/1 var(--mono);
+    }
+
+    .stat.ok strong {
+      color: var(--lime);
+    }
+
+    .stat.warn strong {
+      color: var(--amber);
+    }
+
+    .stat.danger strong {
+      color: var(--red);
+    }
+
+    .wide {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+
+    th,
+    td {
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(114, 238, 255, 0.13);
+      text-align: left;
+    }
+
+    th {
+      color: #8faec5;
+      background: rgba(114, 238, 255, 0.055);
+    }
+
+    tbody tr {
+      transition: background 160ms ease, transform 160ms ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(114, 238, 255, 0.08);
+      transform: translateX(3px);
+    }
+
+    .status {
+      display: inline-flex;
+      min-width: 82px;
+      justify-content: center;
+      border: 1px solid currentColor;
+      padding: 5px 8px;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+    }
+
+    .status.sync {
+      color: var(--lime);
+      background: rgba(184, 255, 106, 0.08);
+    }
+
+    .status.hold {
+      color: var(--amber);
+      background: rgba(255, 200, 87, 0.08);
+    }
+
+    .status.risk {
+      color: var(--red);
+      background: rgba(255, 93, 115, 0.08);
+    }
+
+    .map {
+      min-height: 348px;
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(114, 238, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(114, 238, 255, 0.04) 1px, transparent 1px),
+        radial-gradient(circle at 50% 55%, rgba(114, 238, 255, 0.12), transparent 46%),
+        rgba(5, 16, 29, 0.88);
+      background-size: 24px 24px, 24px 24px, auto, auto;
+    }
+
+    .node {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--cyan);
+      background: var(--bg);
+      box-shadow: 0 0 22px rgba(114, 238, 255, 0.55);
+    }
+
+    .node::after {
+      content: attr(data-label);
+      position: absolute;
+      left: 18px;
+      top: -9px;
+      white-space: nowrap;
+      color: var(--text);
+      font: 800 0.72rem/1 var(--mono);
+    }
+
+    .n1 { left: 18%; top: 27%; }
+    .n2 { left: 68%; top: 22%; border-color: var(--lime); }
+    .n3 { left: 39%; top: 58%; border-color: var(--amber); }
+    .n4 { left: 78%; top: 69%; border-color: var(--red); }
+
+    .right-rail {
+      display: grid;
+      gap: 18px;
+      position: sticky;
+      top: 18px;
+    }
+
+    .alert-list,
+    .action-grid,
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .alert {
+      border: 1px solid rgba(114, 238, 255, 0.18);
+      background: rgba(4, 12, 24, 0.66);
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .alert strong {
+      font-size: 0.92rem;
+    }
+
+    .alert span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .action-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .action {
+      border: 1px solid var(--line);
+      background: rgba(114, 238, 255, 0.08);
+      color: var(--text);
+      padding: 12px;
+      cursor: pointer;
+      text-align: left;
+      font-weight: 800;
+      min-height: 72px;
+    }
+
+    .action:hover {
+      border-color: var(--line-strong);
+      background: rgba(114, 238, 255, 0.15);
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(114, 238, 255, 0.12);
+    }
+
+    .time {
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+    }
+
+    .progress {
+      height: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(114, 238, 255, 0.22);
+      background: rgba(4, 12, 24, 0.9);
+      margin-top: 8px;
+    }
+
+    .bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--lime));
+      box-shadow: 0 0 18px rgba(114, 238, 255, 0.45);
+    }
+
+    @media (max-width: 1300px) {
+      .grid {
+        grid-template-columns: 230px 1fr;
+      }
+
+      .right-rail {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        position: static;
+      }
+
+      .hero,
+      .wide {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 920px) {
+      .shell {
+        width: min(100% - 22px, 1800px);
+      }
+
+      .topbar,
+      .grid,
+      .mission-row,
+      .matrix,
+      .right-rail,
+      .session-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .session-grid {
+        min-width: 0;
+      }
+
+      .sidebar,
+      .right-rail {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="seal">KS</div>
+        <div>
+          <p class="eyebrow">Krishiv Orbital Command</p>
+          <h1>Seed Intake Nexus</h1>
+          <p>Holographic control preview for intake, stacks, vouchers, and discrepancy workflow.</p>
+        </div>
+      </div>
+      <div class="session-grid">
+        <div class="session-card">
+          <span>Season</span>
+          <strong>RABI 2025-26</strong>
+        </div>
+        <div class="session-card">
+          <span>Officer</span>
+          <strong>System Admin</strong>
+        </div>
+        <div class="session-card">
+          <span>Node</span>
+          <strong>Atlas Sync Live</strong>
+        </div>
+      </div>
+    </header>
+
+    <section class="grid">
+      <aside class="sidebar">
+        <div class="nav-title">
+          <span>Module Matrix</span>
+          <span>LIVE</span>
+        </div>
+        <nav class="nav">
+          <button class="active"><span>Command Dashboard</span><span>01</span></button>
+          <button><span>Farmer Registration</span><span>02</span></button>
+          <button><span>Seed Intake Console</span><span>03</span></button>
+          <button><span>Lot Grid Tracking</span><span>04</span></button>
+          <button><span>Discrepancy Control</span><span>05</span></button>
+          <button><span>Payment Vouchers</span><span>06</span></button>
+          <button><span>Slip Print Center</span><span>07</span></button>
+          <button><span>Reports Archive</span><span>08</span></button>
+        </nav>
+      </aside>
+
+      <section class="main">
+        <section class="hero">
+          <article class="command-card">
+            <div class="hero-content">
+              <p class="eyebrow">Central Intelligence Layer</p>
+              <h2>Certification Stock Command</h2>
+              <p>
+                A sci-fi ERP dashboard concept for monitoring gross/net intake, stack capacity,
+                pending farmer intake, discrepancies, vouchers, and district performance from one cockpit.
+              </p>
+              <div class="mission-row">
+                <div class="metric">
+                  <span>Today Intake</span>
+                  <strong>901.81</strong>
+                  <small>QTL synced</small>
+                </div>
+                <div class="metric">
+                  <span>Gross Weight</span>
+                  <strong>916.60</strong>
+                  <small>QTL captured</small>
+                </div>
+                <div class="metric">
+                  <span>Net Weight</span>
+                  <strong>901.81</strong>
+                  <small>QTL validated</small>
+                </div>
+                <div class="metric">
+                  <span>Open Alerts</span>
+                  <strong>17</strong>
+                  <small>need review</small>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="orbital">
+            <div class="core">78%</div>
+            <span class="node n1" data-label="BARAN"></span>
+            <span class="node n2" data-label="BUNDI"></span>
+            <span class="node n3" data-label="KOTA"></span>
+            <span class="node n4" data-label="STACK RISK"></span>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Mission Metrics</h3>
+              <div class="panel-subtitle">Live operational totals from seed intake workflow</div>
+            </div>
+            <span class="pill">Auto Refresh 30s</span>
+          </div>
+          <div class="matrix">
+            <div class="stat ok"><span>Intake Coverage</span><strong>67.42%</strong></div>
+            <div class="stat"><span>Total Bags</span><strong>21,640</strong></div>
+            <div class="stat warn"><span>Pending Intake</span><strong>12,301 QTL</strong></div>
+            <div class="stat danger"><span>Discrepancy Qty</span><strong>313.44 QTL</strong></div>
+            <div class="stat"><span>Lots Created</span><strong>282</strong></div>
+            <div class="stat ok"><span>Full Lots</span><strong>43</strong></div>
+            <div class="stat warn"><span>Voucher Draft</span><strong>38</strong></div>
+            <div class="stat"><span>Net Payable</span><strong>2.74 Cr</strong></div>
+          </div>
+        </section>
+
+        <section class="wide">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Pending Farmer Intake</h3>
+                <div class="panel-subtitle">Click-ready command table concept with full-list expansion</div>
+              </div>
+              <span class="pill">View Full</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reg Code</th>
+                  <th>Farmer</th>
+                  <th>District</th>
+                  <th>Received</th>
+                  <th>Pending</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>R25-4-180</td>
+                  <td>NARESH MEHTA</td>
+                  <td>BARAN</td>
+                  <td>0 QTL</td>
+                  <td>897.60 QTL</td>
+                  <td><span class="status hold">Pending</span></td>
+                </tr>
+                <tr>
+                  <td>R25-4-182</td>
+                  <td>LALVEER</td>
+                  <td>BARAN</td>
+                  <td>0 QTL</td>
+                  <td>875.00 QTL</td>
+                  <td><span class="status hold">Pending</span></td>
+                </tr>
+                <tr>
+                  <td>R25-4-428</td>
+                  <td>SURENDRA KUMAR SHARMA</td>
+                  <td>BARAN</td>
+                  <td>459.65 QTL</td>
+                  <td>513.20 QTL</td>
+                  <td><span class="status sync">Active</span></td>
+                </tr>
+                <tr>
+                  <td>R25-3-882</td>
+                  <td>HARPAL SINGH</td>
+                  <td>BUNDI</td>
+                  <td>0 QTL</td>
+                  <td>471.52 QTL</td>
+                  <td><span class="status risk">Delayed</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="panel map">
+            <div class="panel-header">
+              <div>
+                <h3>District Vector Map</h3>
+                <div class="panel-subtitle">Sci-fi visual layer for district-wise intake load</div>
+              </div>
+              <span class="pill">3 Nodes</span>
+            </div>
+            <div class="node n1" data-label="BARAN 11,366 QTL"></div>
+            <div class="node n2" data-label="BUNDI 6,396 QTL"></div>
+            <div class="node n3" data-label="KOTA 2,913 QTL"></div>
+            <div class="node n4" data-label="RISK STACK"></div>
+          </article>
+        </section>
+
+        <section class="wide">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Godown Utilization</h3>
+                <div class="panel-subtitle">Storage pressure and lot saturation</div>
+              </div>
+              <span class="pill">Open Lots</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Godown</th>
+                  <th>Qty</th>
+                  <th>Lots</th>
+                  <th>Full Lots</th>
+                  <th>Utilization</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PIYUSH ASSOCIATES</td>
+                  <td>14,604.65 QTL</td>
+                  <td>227</td>
+                  <td>31</td>
+                  <td>
+                    32.17%
+                    <div class="progress"><div class="bar" style="width: 32%"></div></div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>MR OIL INDUSTRIES</td>
+                  <td>6,141.75 QTL</td>
+                  <td>55</td>
+                  <td>12</td>
+                  <td>
+                    55.83%
+                    <div class="progress"><div class="bar" style="width: 56%"></div></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Stack Hotspots</h3>
+                <div class="panel-subtitle">Discrepancy stacks with operational risk</div>
+              </div>
+              <span class="pill">Shift Control</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Godown</th>
+                  <th>Stack</th>
+                  <th>Cases</th>
+                  <th>Bags</th>
+                  <th>Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PIYUSH ASSOCIATES</td>
+                  <td>3</td>
+                  <td>3</td>
+                  <td>316</td>
+                  <td>156.31 QTL</td>
+                </tr>
+                <tr>
+                  <td>MR OIL INDUSTRIES</td>
+                  <td>10</td>
+                  <td>1</td>
+                  <td>102</td>
+                  <td>59.03 QTL</td>
+                </tr>
+                <tr>
+                  <td>MR OIL INDUSTRIES</td>
+                  <td>13</td>
+                  <td>1</td>
+                  <td>67</td>
+                  <td>40.08 QTL</td>
+                </tr>
+              </tbody>
+            </table>
+          </article>
+        </section>
+      </section>
+
+      <aside class="right-rail">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Alert Rail</h3>
+              <div class="panel-subtitle">Priority exceptions</div>
+            </div>
+          </div>
+          <div class="alert-list">
+            <div class="alert">
+              <strong>High discrepancy concentration</strong>
+              <span>Stack 3 has 316 bags under review.</span>
+            </div>
+            <div class="alert">
+              <strong>Voucher payment pending</strong>
+              <span>38 drafts need settlement action.</span>
+            </div>
+            <div class="alert">
+              <strong>Intake balance large</strong>
+              <span>Top 5 farmers exceed 3,600 QTL pending.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Quick Commands</h3>
+              <div class="panel-subtitle">Operator shortcuts</div>
+            </div>
+          </div>
+          <div class="action-grid">
+            <button class="action">New Intake</button>
+            <button class="action">Generate Voucher</button>
+            <button class="action">Print Slips</button>
+            <button class="action">Export Report</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Live Timeline</h3>
+              <div class="panel-subtitle">Latest activity</div>
+            </div>
+          </div>
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="time">09:12</span>
+              <span>Receipt 097 synced to Stack 3.</span>
+            </div>
+            <div class="timeline-item">
+              <span class="time">10:24</span>
+              <span>Voucher RABI25-26/01 entered draft.</span>
+            </div>
+            <div class="timeline-item">
+              <span class="time">11:03</span>
+              <span>Discrepancy shift posted for MR Oil stack 10.</span>
+            </div>
+            <div class="timeline-item">
+              <span class="time">12:40</span>
+              <span>District BARAN crossed 11,000 QTL.</span>
+            </div>
+          </div>
+        </article>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
