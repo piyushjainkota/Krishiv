@@ -527,6 +527,10 @@ export class SeedService {
     }
 
     for (const user of defaultUsers) {
+      const existingUser = await UserModel.findOne({ email: user.email }, { id: 1 }).lean();
+      if (existingUser) {
+        continue;
+      }
       const passwordHash = await hashPassword(user.passwordHash);
       await UserModel.updateOne(
         { email: user.email },
@@ -824,7 +828,7 @@ export class SeedService {
   }
 
   async loginUser(input: LoginInput) {
-    await this.ensureCompatibility();
+    await this.ensureDefaultUsers();
     const user = await this.findActiveUser(input.email);
     const storedPassword = String(user?.passwordHash ?? "");
     if (!user || !(await verifyPassword(input.password, storedPassword))) {
@@ -1001,7 +1005,7 @@ export class SeedService {
   }
 
   async authorizeUser(email: string, role: string, allowedRoles: AppRole[]) {
-    await this.ensureCompatibility();
+    await this.ensureDefaultUsers();
     if (!email || !role) {
       throw new Error("Login required.");
     }
@@ -1054,7 +1058,7 @@ export class SeedService {
   }
 
   async bootstrapCore() {
-    await this.ensureCompatibility();
+    await this.ensureDefaultUsers();
     if ((await GodownModel.countDocuments()) === 0) {
       await GodownModel.insertMany(defaultGodowns);
     }
@@ -1082,7 +1086,7 @@ export class SeedService {
   }
 
   async bootstrapOperational() {
-    await this.ensureCompatibility();
+    await this.ensureDefaultUsers();
     const [
       lots,
       receipts,
