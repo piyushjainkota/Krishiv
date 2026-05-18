@@ -27,3 +27,5 @@ registrations-import.json
 .DS_Store
 Thumbs.db
 .claude/
+
+.vercel
