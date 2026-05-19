@@ -1573,9 +1573,7 @@ export default function HomePage() {
   const visibleNavSections = navSections
     .map((section) => ({
       ...section,
-      items: section.items.filter(
-        (item) => item.key !== "discrepancies" || features.discrepancyWorkflow
-      )
+      items: section.items
     }))
     .filter((section) => section.items.length > 0);
   const visibleNavItems = visibleNavSections.flatMap((section) => section.items);
@@ -10953,7 +10951,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {activeView === "discrepancies" && features.discrepancyWorkflow && (
+          {activeView === "discrepancies" && (
             <div className="contentStack">
               <section className="panel metricsPanel">
                 <div className="metricBox">
